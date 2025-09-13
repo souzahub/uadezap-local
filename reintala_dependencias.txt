@@ -1,0 +1,14 @@
+npm install @whiskeysockets/baileys
+npm install axios
+npm install dotenv
+npm install express
+npm install qrcode
+
+npm install
+
+
+
+curl -X POST http://77.93.154.20:3000/send-text \
+-H "Content-Type: application/json" \
+-H "x-api-key: 167f9b3e2c18a5b1c2b3489a631d2910" \
+-d '{"number":"5522999569035","message":"teste"}'

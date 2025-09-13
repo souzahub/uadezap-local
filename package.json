@@ -1,0 +1,35 @@
+{
+  "name": "uadezap",
+  "version": "1.0.0",
+  "description": "API não oficial do WhatsApp com Baileys e Express",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=22.16.0 <23.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/souzahub/uadezap.git"
+  },
+  "keywords": [
+    "whatsapp",
+    "api",
+    "baileys",
+    "automation"
+  ],
+  "author": "Luan Souza",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/souzahub/uadezap/issues"
+  },
+  "homepage": "https://github.com/souzahub/uadezap#readme",
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.7.19",
+    "axios": "^1.11.0",
+    "dotenv": "^17.2.2",
+    "express": "^4.21.2",
+    "qrcode": "^1.5.4"
+  }
+}

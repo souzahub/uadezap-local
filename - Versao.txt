@@ -1,0 +1,9 @@
+Servidor em Node - Versao 1.0.1
+
+## Importante Instalar versão do node: node-v22.16.0-x64, esta na pasta com  os arquivos.
+
+# COMO usar - Excute o servidor "Inicializar.bat" e digite o Ip da maquina pelo navegador seguido da porta e foi designada no .env, Exemplo: http://123.00.00.20:3000/ e clique Ver QrCode e clique em conectar.
+caso utilize o N8N coloque server_webhook_n8n.js e la no .env  " N8N_WEBHOOK_URL " coloque a url do seu webhook do N8N.
+
+# versão 120925 - Além de envios de Imagens, documentos, Pdf e texto agora tem o no método Get (como um webhook ) ou seja fica aguardando requisições
+Recebe uma mensagem "📤 Entregando 0 mensagens para o Delphi" quando recebe uma mensagem.
