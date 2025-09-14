@@ -13,6 +13,7 @@ app.use('/auth', express.static('auth_info_baileys_local'));
 // === Variáveis globais ===
 let sock = null;
 let qrCodeData = null;
+let serverStartedAt = null; // Nova variável para armazenar a data de início do servidor
 
 //13/09/25
 const receivedMessages = []; // Armazena mensagens recebidas
@@ -24,7 +25,7 @@ const processedMessages = new Set();
 
 // Contador para limpar o console
 let logCount = 0;
-const LOG_LIMIT = 10;
+const LOG_LIMIT = 20;
 
 // Função de log personalizada que limpa o console a cada 10 logs
 function customLog(...args) {
@@ -41,18 +42,18 @@ function customLog(...args) {
 function cleanupOldMessages() {
     const now = Date.now();
     let removedCount = 0;
-    
+
     for (let i = receivedMessages.length - 1; i >= 0; i--) {
         if (now - receivedMessages[i]._timestamp > MESSAGE_TIMEOUT) {
             receivedMessages.splice(i, 1);
             removedCount++;
         }
     }
-    
+
     if (removedCount > 0) {
         customLog(`🧹 Limpas ${removedCount} mensagens expiradas`);
     }
-    
+
     // Limitar tamanho máximo do array
     if (receivedMessages.length > MAX_MESSAGES) {
         const excess = receivedMessages.length - MAX_MESSAGES;
@@ -134,7 +135,7 @@ async function connectToWhatsApp() {
             if (connection === 'close') {
                 const shouldReconnect = new Boom(lastDisconnect?.error)?.output?.statusCode !== DisconnectReason.loggedOut;
                 customLog('🔌 Conexão fechada. Motivo: ' + (lastDisconnect?.error?.message || 'Desconhecido'));
-                
+
                 if (shouldReconnect) {
                     customLog('🔁 Reconectando em 3 segundos...');
                     setTimeout(() => {
@@ -159,52 +160,52 @@ async function connectToWhatsApp() {
         sock.ev.on('messages.upsert', async ({ messages, type }) => {
             // Processar apenas notificações de novas mensagens
             if (type !== 'notify') return;
-            
-            for (const msg of messages) {
-            if (!msg.key || msg.key.fromMe) {
-                    continue;
-            }
 
-            const messageId = msg.key.id;
-            if (!messageId || processedMessages.has(messageId)) {
+            for (const msg of messages) {
+                if (!msg.key || msg.key.fromMe) {
                     continue;
-            }
-            processedMessages.add(messageId);
+                }
+
+                const messageId = msg.key.id;
+                if (!messageId || processedMessages.has(messageId)) {
+                    continue;
+                }
+                processedMessages.add(messageId);
 
                 // Limpar cache de mensagens processadas se ficar muito grande
                 if (processedMessages.size > 2000) {
                     processedMessages.clear();
                 }
 
-            // Ignora mensagens de sistema
-            const systemKeys = Object.keys(msg.message || {});
-            const ignoredTypes = [
-                'protocolMessage',
-                'senderKeyDistributionMessage',
+                // Ignora mensagens de sistema
+                const systemKeys = Object.keys(msg.message || {});
+                const ignoredTypes = [
+                    'protocolMessage',
+                    'senderKeyDistributionMessage',
                     'ephemeralSetting',
                     'reactionMessage',
                     'pollCreationMessage',
                     'pollUpdateMessage'
-            ];
-            if (systemKeys.some(k => ignoredTypes.includes(k))) {
+                ];
+                if (systemKeys.some(k => ignoredTypes.includes(k))) {
                     continue;
-            }
+                }
 
-            const from = jidNormalizedUser(msg.key.remoteJid);
-            const pushName = msg.pushName || 'Desconhecido';
-            const timestamp = msg.messageTimestamp;
+                const from = jidNormalizedUser(msg.key.remoteJid);
+                const pushName = msg.pushName || 'Desconhecido';
+                const timestamp = msg.messageTimestamp;
 
                 // Filtrar mensagens promocionais de grupos e comunidades
                 const isGroup = from.includes('@g.us');
                 const isCommunity = from.includes('@newsletter');
-                
+
                 if (isGroup || isCommunity) {
                     // Verificar se é mensagem promocional baseada em padrões comuns
-                    const textContent = msg.message?.conversation || 
-                                     msg.message?.extendedTextMessage?.text || 
-                                     msg.message?.imageMessage?.caption || 
-                                     '';
-                    
+                    const textContent = msg.message?.conversation ||
+                        msg.message?.extendedTextMessage?.text ||
+                        msg.message?.imageMessage?.caption ||
+                        '';
+
                     const promotionalPatterns = [
                         /promoção/i,
                         /oferta/i,
@@ -229,9 +230,9 @@ async function connectToWhatsApp() {
                         /levando \d+ por \d+/i,
                         /compre \d+ leve \d+/i
                     ];
-                    
+
                     const isPromotional = promotionalPatterns.some(pattern => pattern.test(textContent));
-                    
+
                     if (isPromotional) {
                         customLog(`🚫 Mensagem promocional ignorada de ${isGroup ? 'grupo' : 'comunidade'}: ${from}`);
                         continue;
@@ -242,35 +243,35 @@ async function connectToWhatsApp() {
                 const processMessage = async (messageObj) => {
                     if (!messageObj) return null;
 
-            let messageData = {
-                from,
-                pushName,
-                timestamp,
+                    let messageData = {
+                        from,
+                        pushName,
+                        timestamp,
                         deviceType: msg.key.id.includes('BAE5') ? 'android' : 'web',
                         instance: sock.user?.id || 'unknown',
                         instanceName: sock.user?.name || 'Unknown',
                         instanceDevice: sock.user?.deviceType || 'unknown'
-            };
+                    };
 
-            // 1. Texto
+                    // 1. Texto
                     if (messageObj.conversation) {
-                messageData.type = 'text';
+                        messageData.type = 'text';
                         messageData.text = messageObj.conversation;
                     } else if (messageObj.extendedTextMessage?.text) {
-                messageData.type = 'text';
+                        messageData.type = 'text';
                         messageData.text = messageObj.extendedTextMessage.text;
-            }
+                    }
 
-            // 2. Imagem
+                    // 2. Imagem
                     else if (messageObj.imageMessage) {
                         const img = messageObj.imageMessage;
-                messageData.type = 'image';
-                messageData.mimetype = img.mimetype;
-                messageData.caption = img.caption || '';
-                messageData.text = img.caption || '';
-                messageData.height = img.height;
-                messageData.width = img.width;
-                        
+                        messageData.type = 'image';
+                        messageData.mimetype = img.mimetype;
+                        messageData.caption = img.caption || '';
+                        messageData.text = img.caption || '';
+                        messageData.height = img.height;
+                        messageData.width = img.width;
+
                         // Baixar e converter imagem para base64 (igual Evolution API)
                         try {
                             customLog('🔄 Baixando imagem...');
@@ -285,18 +286,18 @@ async function connectToWhatsApp() {
                         } catch (err) {
                             customLog('❌ Erro ao baixar imagem:', err.message);
                         }
-            }
+                    }
 
-            // 3. Vídeo
+                    // 3. Vídeo
                     else if (messageObj.videoMessage) {
                         const video = messageObj.videoMessage;
-                messageData.type = 'video';
-                messageData.mimetype = video.mimetype;
-                messageData.caption = video.caption || '';
-                messageData.text = video.caption || '';
-                messageData.seconds = video.seconds;
-                messageData.gifPlayback = !!video.gifPlayback;
-                        
+                        messageData.type = 'video';
+                        messageData.mimetype = video.mimetype;
+                        messageData.caption = video.caption || '';
+                        messageData.text = video.caption || '';
+                        messageData.seconds = video.seconds;
+                        messageData.gifPlayback = !!video.gifPlayback;
+
                         // Baixar e converter vídeo para base64 (igual Evolution API)
                         try {
                             customLog('🔄 Baixando vídeo...');
@@ -311,16 +312,16 @@ async function connectToWhatsApp() {
                         } catch (err) {
                             customLog('❌ Erro ao baixar vídeo:', err.message);
                         }
-            }
+                    }
 
-            // 4. Áudio
+                    // 4. Áudio
                     else if (messageObj.audioMessage) {
                         const audio = messageObj.audioMessage;
-                messageData.type = 'audio';
-                messageData.mimetype = audio.mimetype;
-                messageData.seconds = audio.seconds;
-                messageData.ptt = !!audio.ptt;
-                        
+                        messageData.type = 'audio';
+                        messageData.mimetype = audio.mimetype;
+                        messageData.seconds = audio.seconds;
+                        messageData.ptt = !!audio.ptt;
+
                         // Baixar e converter áudio para base64 (igual Evolution API)
                         try {
                             customLog('🔄 Baixando áudio...');
@@ -350,17 +351,17 @@ async function connectToWhatsApp() {
                                 customLog('❌ Erro no método alternativo:', err2.message);
                             }
                         }
-            }
+                    }
 
-            // 5. Documento (PDF, etc.)
+                    // 5. Documento (PDF, etc.)
                     else if (messageObj.documentMessage) {
                         const doc = messageObj.documentMessage;
-                messageData.type = 'document';
-                messageData.mimetype = doc.mimetype;
-                messageData.fileName = doc.fileName;
-                messageData.fileLength = doc.fileLength?.toString();
-                messageData.pageCount = doc.pageCount;
-                        
+                        messageData.type = 'document';
+                        messageData.mimetype = doc.mimetype;
+                        messageData.fileName = doc.fileName;
+                        messageData.fileLength = doc.fileLength?.toString();
+                        messageData.pageCount = doc.pageCount;
+
                         // Baixar e converter documento para base64 (igual Evolution API)
                         try {
                             customLog('🔄 Baixando documento...');
@@ -375,15 +376,15 @@ async function connectToWhatsApp() {
                         } catch (err) {
                             customLog('❌ Erro ao baixar documento:', err.message);
                         }
-            }
+                    }
 
-            // 6. Sticker
+                    // 6. Sticker
                     else if (messageObj.stickerMessage) {
                         const sticker = messageObj.stickerMessage;
-                messageData.type = 'sticker';
-                messageData.mimetype = sticker.mimetype;
-                messageData.isAnimated = !!sticker.isAnimated;
-                        
+                        messageData.type = 'sticker';
+                        messageData.mimetype = sticker.mimetype;
+                        messageData.isAnimated = !!sticker.isAnimated;
+
                         // Baixar e converter sticker para base64 (igual Evolution API)
                         try {
                             const stickerBuffer = await sock.downloadMediaMessage(msg);
@@ -394,34 +395,34 @@ async function connectToWhatsApp() {
                         } catch (err) {
                             customLog('⚠️ Erro ao baixar sticker:', err.message);
                         }
-            }
+                    }
 
-            // 7. Contato
+                    // 7. Contato
                     else if (messageObj.contactMessage) {
                         const contact = messageObj.contactMessage;
-                messageData.type = 'contact';
-                messageData.displayName = contact.displayName;
-                messageData.vcard = contact.vcard;
-            }
+                        messageData.type = 'contact';
+                        messageData.displayName = contact.displayName;
+                        messageData.vcard = contact.vcard;
+                    }
 
-            // 8. Localização
+                    // 8. Localização
                     else if (messageObj.locationMessage) {
                         const loc = messageObj.locationMessage;
-                messageData.type = 'location';
-                messageData.degreesLatitude = loc.degreesLatitude;
-                messageData.degreesLongitude = loc.degreesLongitude;
-                messageData.name = loc.name || '';
-                messageData.address = loc.address || '';
-            }
+                        messageData.type = 'location';
+                        messageData.degreesLatitude = loc.degreesLatitude;
+                        messageData.degreesLongitude = loc.degreesLongitude;
+                        messageData.name = loc.name || '';
+                        messageData.address = loc.address || '';
+                    }
 
-            // 9. Lista ou Botão (respostas)
+                    // 9. Lista ou Botão (respostas)
                     else if (messageObj.listResponseMessage || messageObj.buttonsResponseMessage) {
                         const list = messageObj.listResponseMessage;
                         const button = messageObj.buttonsResponseMessage;
-                messageData.type = list ? 'list_response' : 'button_response';
-                messageData.selectedDisplayText = list?.title || button?.selectedDisplayText;
-                messageData.selectedId = list?.singleSelectReply?.selectedRowId || button?.selectedButtonId;
-            }
+                        messageData.type = list ? 'list_response' : 'button_response';
+                        messageData.selectedDisplayText = list?.title || button?.selectedDisplayText;
+                        messageData.selectedId = list?.singleSelectReply?.selectedRowId || button?.selectedButtonId;
+                    }
 
                     return messageData.type ? messageData : null;
                 };
@@ -440,7 +441,7 @@ async function connectToWhatsApp() {
                     timestamp: messageData.timestamp,
                     type: messageData.type
                 });
-               // ➕ ARMAZENA A MENSAGEM PARA O DELPHI         
+                // ➕ ARMAZENA A MENSAGEM PARA O DELPHI         
                 const storedMessage = {
                     ...messageData,
                     _id: messageId,
@@ -456,16 +457,16 @@ async function connectToWhatsApp() {
                     cleanupOldMessages();
                 }
 
-            // Envia para webhook
-            if (N8N_WEBHOOK_URL) {
-                try {
-                    await axios.post(N8N_WEBHOOK_URL, messageData, {
-                        timeout: 5000,
-                        headers: { 'Content-Type': 'application/json' }
-                    });
+                // Envia para webhook
+                if (N8N_WEBHOOK_URL) {
+                    try {
+                        await axios.post(N8N_WEBHOOK_URL, messageData, {
+                            timeout: 5000,
+                            headers: { 'Content-Type': 'application/json' }
+                        });
                         customLog(`✅ Enviado para webhook: ${from}`);
-                } catch (err) {
-                    console.error('❌ Falha no webhook:', err.message);
+                    } catch (err) {
+                        console.error('❌ Falha no webhook:', err.message);
                     }
                 }
             }
@@ -492,7 +493,7 @@ const auth = (req, res, next) => {
 
 // Página inicial
 app.get('/', (req, res) => {
-        res.send(`
+    res.send(`
         <!doctype html>
             <html lang="pt-BR">
             <head>
@@ -695,6 +696,8 @@ app.get('/', (req, res) => {
                             <div>${process.env.PORT || 3000}</div>
                             <div class="muted">QR Code</div>
                             <div>${qrCodeData ? 'Disponível' : (sock ? '—' : 'Aguardando')}</div>
+                            <div class="muted">Último Ligado</div>
+                            <div>${serverStartedAt ? serverStartedAt.toLocaleString() : 'N/A'}</div>
                         </div>
                         <div style="margin-top: 20px; display: flex; gap: 12px; flex-wrap: wrap;">
                             <a class="btn" href="/qrcode">Ver QR Code</a>
@@ -705,6 +708,8 @@ app.get('/', (req, res) => {
                         <h2>Como usar</h2>
                         <div class="muted">Endpoints rápidos</div>
                         <div class="kvs">
+                            <div class="muted">GET</div>
+                            <div><code>/get-messages</code> — busca mensagens para o Delphi</div>
                             <div class="muted">GET</div>
                             <div><code>/connect</code> — inicia a sessão</div>
                             <div class="muted">GET</div>
@@ -727,7 +732,7 @@ app.get('/', (req, res) => {
                     </div>
                 </div>
 
-                <div class="footer">© 2025 Uadezap • Baileys • Easypanel Ready _ desenvolvido por LuanSouza de SIqueira - 2025</div>
+                <div class="footer">© 2025 Uadezap • Baileys • Easypanel Ready • Delphi _ desenvolvido por LuanSouza de Siqueira - 2025</div>
             </div>
             </body>
             </html>
@@ -856,9 +861,9 @@ app.post('/send-text', auth, async (req, res) => {
         const id = number.includes('@s.whatsapp.net') ? number : `${number}@s.whatsapp.net`;
         await sock.sendMessage(id, { text: message });
         customLog(`📤 Texto enviado para: ${id}`);
-        res.json({ 
-            success: true, 
-            to: id, 
+        res.json({
+            success: true,
+            to: id,
             message,
             instance: sock.user?.id || 'unknown',
             instanceName: sock.user?.name || 'Unknown'
@@ -877,7 +882,7 @@ app.post('/send-image', auth, async (req, res) => {
 
     try {
         const id = number.includes('@s.whatsapp.net') ? number : `${number}@s.whatsapp.net`;
-        
+
         // Se image é uma URL, baixar a imagem
         let imageBuffer;
         if (image.startsWith('http')) {
@@ -893,9 +898,9 @@ app.post('/send-image', auth, async (req, res) => {
             caption: caption || ''
         });
         customLog(`📤 Imagem enviada para: ${id}`);
-        res.json({ 
-            success: true, 
-            to: id, 
+        res.json({
+            success: true,
+            to: id,
             type: 'image',
             instance: sock.user?.id || 'unknown',
             instanceName: sock.user?.name || 'Unknown'
@@ -914,7 +919,7 @@ app.post('/send-video', auth, async (req, res) => {
 
     try {
         const id = number.includes('@s.whatsapp.net') ? number : `${number}@s.whatsapp.net`;
-        
+
         // Se video é uma URL, baixar o vídeo
         let videoBuffer;
         if (video.startsWith('http')) {
@@ -930,9 +935,9 @@ app.post('/send-video', auth, async (req, res) => {
             caption: caption || ''
         });
         customLog(`📤 Vídeo enviado para: ${id}`);
-        res.json({ 
-            success: true, 
-            to: id, 
+        res.json({
+            success: true,
+            to: id,
             type: 'video',
             instance: sock.user?.id || 'unknown',
             instanceName: sock.user?.name || 'Unknown'
@@ -951,7 +956,7 @@ app.post('/send-audio', auth, async (req, res) => {
 
     try {
         const id = number.includes('@s.whatsapp.net') ? number : `${number}@s.whatsapp.net`;
-        
+
         // Se audio é uma URL, baixar o áudio
         let audioBuffer;
         if (audio.startsWith('http')) {
@@ -967,10 +972,10 @@ app.post('/send-audio', auth, async (req, res) => {
             ptt: ptt // true para áudio de voz, false para música
         });
         customLog(`📤 Áudio enviado para: ${id} (PTT: ${ptt})`);
-        res.json({ 
-            success: true, 
-            to: id, 
-            type: 'audio', 
+        res.json({
+            success: true,
+            to: id,
+            type: 'audio',
             ptt,
             instance: sock.user?.id || 'unknown',
             instanceName: sock.user?.name || 'Unknown'
@@ -989,13 +994,13 @@ app.post('/send-document', auth, async (req, res) => {
 
     try {
         const id = number.includes('@s.whatsapp.net') ? number : `${number}@s.whatsapp.net`;
-        
+
         // Se document é uma URL, baixar o documento
         let documentBuffer;
         if (document.startsWith('http')) {
             const response = await axios.get(document, { responseType: 'arraybuffer' });
             documentBuffer = Buffer.from(response.data);
-                        } else {
+        } else {
             // Se é base64, converter para buffer
             documentBuffer = Buffer.from(document.replace(/^data:application\/[a-z]+;base64,/, ''), 'base64');
         }
@@ -1006,10 +1011,10 @@ app.post('/send-document', auth, async (req, res) => {
             caption: caption || ''
         });
         customLog(`📤 Documento enviado para: ${id} (${filename || 'documento.pdf'})`);
-        res.json({ 
-            success: true, 
-            to: id, 
-            type: 'document', 
+        res.json({
+            success: true,
+            to: id,
+            type: 'document',
             filename: filename || 'documento.pdf',
             instance: sock.user?.id || 'unknown',
             instanceName: sock.user?.name || 'Unknown'
@@ -1028,7 +1033,7 @@ app.post('/send-location', auth, async (req, res) => {
 
     try {
         const id = number.includes('@s.whatsapp.net') ? number : `${number}@s.whatsapp.net`;
-        
+
         await sock.sendMessage(id, {
             location: {
                 degreesLatitude: parseFloat(latitude),
@@ -1038,11 +1043,11 @@ app.post('/send-location', auth, async (req, res) => {
             }
         });
         customLog(`📤 Localização enviada para: ${id} (${latitude}, ${longitude})`);
-        res.json({ 
-            success: true, 
-            to: id, 
-            type: 'location', 
-            latitude, 
+        res.json({
+            success: true,
+            to: id,
+            type: 'location',
+            latitude,
             longitude,
             instance: sock.user?.id || 'unknown',
             instanceName: sock.user?.name || 'Unknown'
@@ -1063,15 +1068,15 @@ app.post('/webhook-receive', auth, (req, res) => {
 app.get('/get-messages', auth, (req, res) => {
     try {
         cleanupOldMessages(); // Limpa mensagens antigas primeiro
-        
+
         // Filtrar apenas mensagens não processadas
         const unprocessedMessages = receivedMessages.filter(msg => !msg._processed);
-        
+
         // Marcar como processadas
         unprocessedMessages.forEach(msg => msg._processed = true);
-        
+
         customLog(`📤 Entregando ${unprocessedMessages.length} mensagens para o Delphi`);
-        
+
         res.json({
             status: 'success',
             count: unprocessedMessages.length,
@@ -1085,7 +1090,7 @@ app.get('/get-messages', auth, (req, res) => {
                 deviceType: msg.deviceType
             }))
         });
-        
+
     } catch (err) {
         customLog('❌ Erro em /get-messages:', err.message);
         res.status(500).json({ error: err.message });
@@ -1095,7 +1100,7 @@ app.get('/get-messages', auth, (req, res) => {
 // [GET] /webhook-status - Status do webhook interno
 app.get('/webhook-status', auth, (req, res) => {
     cleanupOldMessages();
-    
+
     res.json({
         status: 'active',
         received_messages: receivedMessages.length,
@@ -1109,9 +1114,10 @@ app.get('/webhook-status', auth, (req, res) => {
 // === INICIAR SERVIDOR ===
 const PORT = parseInt(process.env.PORT) || 3000;
 app.listen(PORT, () => {
+    serverStartedAt = new Date(); // Armazena a data/hora de início do servidor
     customLog(`✅ Servidor rodando na porta ${PORT}`);
     customLog(`🔗 Acesse: http://localhost:${PORT}/connect`);
-    
+
     // Iniciar conexão automática após 2 segundos
     setTimeout(() => {
         if (makeWASocket) {
