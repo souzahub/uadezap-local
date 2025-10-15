@@ -1,10 +1,10 @@
 // server.js - API WhatsApp tipo Evolution (ESM Safe + Easypanel Ready)
 
-require('dotenv').config();
 const express = require('express');
 const { Boom } = require('@hapi/boom');
 const QRCode = require('qrcode');
 const axios = require('axios');
+const ffmpeg = require('fluent-ffmpeg'); // Adicionado para transcodificação de áudio
 const app = express();
 
 app.use(express.json({ limit: '10mb' }));
@@ -29,7 +29,7 @@ function customLog(...args) {
 }
 
 // === Variáveis do Baileys (preenchidas via import dinâmico) ===
-let makeWASocket, useMultiFileAuthState, DisconnectReason, jidNormalizedUser, fetchLatestBaileysVersion;
+let makeWASocket, useMultiFileAuthState, DisconnectReason, jidNormalizedUser;
 
 // === Carregar Baileys com import() dinâmico (ES Module) ===
 (async () => {
@@ -39,7 +39,6 @@ let makeWASocket, useMultiFileAuthState, DisconnectReason, jidNormalizedUser, fe
         useMultiFileAuthState = baileys.useMultiFileAuthState;
         DisconnectReason = baileys.DisconnectReason;
         jidNormalizedUser = baileys.jidNormalizedUser;
-        fetchLatestBaileysVersion = baileys.fetchLatestBaileysVersion;
         customLog('✅ Baileys carregado com sucesso');
         
         // === INICIAR SERVIDOR ===
@@ -61,53 +60,19 @@ let makeWASocket, useMultiFileAuthState, DisconnectReason, jidNormalizedUser, fe
 // === CONFIGURAÇÕES ===
 const API_KEY = process.env.API_KEY || 'minha123senha';
 const N8N_WEBHOOK_URL = process.env.N8N_WEBHOOK_URL || null;
-const CONFIG_SESSION_PHONE_VERSION = process.env.CONFIG_SESSION_PHONE_VERSION || '';
-const VERSION = '1.0.3';
+const VERSION = '1.0.7';
 
 async function connectToWhatsApp() {
     customLog('🔄 Tentando conectar ao WhatsApp...');
     const { state, saveCreds } = await useMultiFileAuthState('./auth_info_baileys');
-
-    // Seleciona versão do WhatsApp Web: ENV forçada ou última suportada
-    let forcedVersionTuple = null;
-    if (CONFIG_SESSION_PHONE_VERSION) {
-        try {
-            forcedVersionTuple = CONFIG_SESSION_PHONE_VERSION.split('.')
-                .map((n) => parseInt(n, 10))
-                .filter((n) => Number.isFinite(n));
-            if (forcedVersionTuple.length !== 3) {
-                customLog('⚠️ CONFIG_SESSION_PHONE_VERSION inválida. Esperado formato X.Y.Z');
-                forcedVersionTuple = null;
-            }
-        } catch {}
-    }
-
-    let resolvedVersion = null;
-    if (!forcedVersionTuple && typeof fetchLatestBaileysVersion === 'function') {
-        try {
-            const latest = await fetchLatestBaileysVersion();
-            resolvedVersion = latest?.version;
-        } catch (e) {
-            customLog('⚠️ Falha ao buscar versão WA mais recente:', e?.message || e);
-        }
-    }
 
     sock = makeWASocket({
         auth: state,
         printQRInTerminal: false,
         syncFullHistory: false,
         markOnlineOnConnect: true,
-        browser: ['Uadezap API', 'Chrome', '1.0.2'],
-        version: forcedVersionTuple || resolvedVersion || undefined
+        browser: ['Uadezap API', 'Chrome', '1.0.2']
     });
-
-    if (forcedVersionTuple) {
-        customLog('🔧 Usando versão WA (forçada via ENV):', forcedVersionTuple.join('.'));
-    } else if (resolvedVersion) {
-        customLog('ℹ️ Usando versão WA (mais recente):', resolvedVersion.join('.'));
-    } else {
-        customLog('ℹ️ Versão WA padrão do Baileys será utilizada.');
-    }
 
     sock.ev.on('connection.update', ({ qr, connection, lastDisconnect }) => {
         if (qr) {
@@ -175,17 +140,70 @@ async function connectToWhatsApp() {
 
         customLog('📩 Recebido:', messageData);
 
-        if (N8N_WEBHOOK_URL) {
-            try {
-                await axios.post(N8N_WEBHOOK_URL, messageData, {
-                    timeout: 5000,
-                    headers: { 'Content-Type': 'application/json' }
-                });
-                customLog(`✅ Enviado para webhook: ${from}`);
-            } catch (err) {
-                console.error('❌ Falha ao enviar ao n8n:', err.message);
-            }
-        }
+        // Envia para webhook
+                if (N8N_WEBHOOK_URL) {
+                    try {
+                        const payloadForN8N = {
+                            event: 'messages.upsert', // Ou outro evento relevante
+                            instance: messageData.instanceName || 'unknown', // Usar o nome da instância como 'instance'
+                            data: {
+                                key: {
+                                    remoteJid: from,
+                                    fromMe: false,
+                                    id: messageId,
+                                    // senderLid: messageData.senderLid // Se você tiver isso no messageData
+                                },
+                                pushName: pushName,
+                                // status: "DELIVERY_ACK", // Isso pode ser mais complexo de replicar
+                                message: {
+                                    // Adicionar os campos específicos da mídia se for o caso
+                                    // Por exemplo, para imagem:
+                                    // imageMessage: { ... },
+                                    // videoMessage: { ... },
+                                    // ...
+                                    // E o base64 no mesmo nível
+                                    base64: messageData.base64,
+                                    // Adicionar o tipo da mensagem aqui também
+                                    messageType: messageData.type + 'Message', // ex: 'imageMessage'
+                                    messageTimestamp: timestamp,
+                                    // Outros campos da mensagem original do Baileys
+                                    ...msg.message // Incluir o objeto 'message' original do Baileys
+                                },
+                                messageType: messageData.type + 'Message', // Ex: 'imageMessage'
+                                messageTimestamp: timestamp,
+                                instanceId: messageData.instance || 'unknown', // Usar o ID da instância
+                                source: messageData.deviceType || 'unknown' // Tipo de dispositivo
+                            },
+                            destination: N8N_WEBHOOK_URL, // O próprio URL do webhook do N8N
+                            date_time: new Date().toISOString(),
+                            sender: from,
+                            server_url: process.env.SERVER_URL || 'http://localhost:3000', // URL do seu servidor
+                            apikey: API_KEY
+                        };
+
+                        // Se a mensagem for de mídia, garantir que os dados específicos estejam aninhados
+                        if (messageData.type === 'image' && msg.message?.imageMessage) {
+                            payloadForN8N.data.message.imageMessage = msg.message.imageMessage;
+                        } else if (messageData.type === 'video' && msg.message?.videoMessage) {
+                            payloadForN8N.data.message.videoMessage = msg.message.videoMessage;
+                        } else if (messageData.type === 'audio' && msg.message?.audioMessage) {
+                            payloadForN8N.data.message.audioMessage = msg.message.audioMessage;
+                        } else if (messageData.type === 'document' && msg.message?.documentMessage) {
+                            payloadForN8N.data.message.documentMessage = msg.message.documentMessage;
+                        } else if (messageData.type === 'sticker' && msg.message?.stickerMessage) {
+                            payloadForN8N.data.message.stickerMessage = msg.message.stickerMessage;
+                        }
+
+
+                        await axios.post(N8N_WEBHOOK_URL, payloadForN8N, {
+                            timeout: 5000,
+                            headers: { 'Content-Type': 'application/json' }
+                        });
+                        customLog(`✅ Enviado para webhook: ${from}`);
+                    } catch (err) {
+                        console.error('❌ Falha no webhook:', err.message);
+                    }
+                }
     });
 }
 
@@ -338,7 +356,7 @@ app.get('/', (req, res) => {
                     </div>
                 </div>
 
-                <div class="footer">© 2025 Uadezap • Baileys • Easypanel Ready _ desenvolvido por LuanSouza de SIqueira - 2025</div>
+                <div class="footer">© 2025 Uadezap • Baileys • Easypanel Ready _ desenvolvido por Luan Souza de Siqueira - 2025</div>
             </div>
         </body>
         </html>
@@ -440,7 +458,7 @@ app.get('/qrcode', (req, res) => {
                         <div class="muted">A página atualiza automaticamente a cada 5 segundos.</div>
                     </div>
                 </div>
-                <div style="margin-top: 26px; font-size: 12px; color: var(--muted);">© 2025 Uadezap • Baileys • Easypanel Ready _ desenvolvido por LuanSouza de SIqueira - 2025</div>
+                <div style="margin-top: 26px; font-size: 12px; color: var(--muted);">© 2025 Uadezap • Baileys • Easypanel Ready _ desenvolvido por Luan Souza de Siqueira - 2025</div>
             </div>
         </body>
         </html>
@@ -459,6 +477,265 @@ app.post('/send-text', auth, async (req, res) => {
         res.json({ success: true, to: id, message });
     } catch (err) {
         console.error('❌ Erro ao enviar:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Enviar imagem
+app.post('/send-image', auth, async (req, res) => {
+    const { number, image, caption } = req.body;
+    if (!sock) return res.status(500).json({ error: 'WhatsApp desconectado.' });
+    if (!number || !image) return res.status(400).json({ error: 'Campos obrigatórios: number, image' });
+
+    try {
+        const id = number.includes('@s.whatsapp.net') ? number : `${number}@s.whatsapp.net`;
+
+        let imageBuffer;
+        // Verifica se é uma URL (começa com http ou https)
+        if (image.startsWith('http://') || image.startsWith('https://')) {
+            customLog('🔄 Baixando imagem de URL...');
+            const response = await axios.get(image, { responseType: 'arraybuffer' });
+            imageBuffer = Buffer.from(response.data);
+            customLog(`✅ Imagem baixada de URL: ${imageBuffer.length} bytes`);
+        } else if (image.startsWith('data:image/')) {
+            // Se é base64, converter para buffer (removendo o prefixo data:image/...)
+            customLog('🔄 Decodificando imagem Base64...');
+            imageBuffer = Buffer.from(image.split(',')[1], 'base64');
+            customLog(`✅ Imagem Base64 decodificada: ${imageBuffer.length} bytes`);
+        } else {
+            // Assumir que é uma string base64 pura (sem prefixo)
+            customLog('🔄 Decodificando imagem Base64 (sem prefixo)...');
+            imageBuffer = Buffer.from(image, 'base64');
+            customLog(`✅ Imagem Base64 decodificada: ${imageBuffer.length} bytes`);
+        }
+
+        await sock.sendMessage(id, {
+            image: imageBuffer,
+            caption: caption || ''
+        });
+        customLog(`📤 Imagem enviada para: ${id}`);
+        res.json({
+            success: true,
+            to: id,
+            type: 'image',
+            instance: sock.user?.id || 'unknown',
+            instanceName: sock.user?.name || 'Unknown'
+        });
+    } catch (err) {
+        customLog('❌ Erro ao enviar imagem:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Enviar vídeo
+app.post('/send-video', auth, async (req, res) => {
+    const { number, video, caption } = req.body;
+    if (!sock) return res.status(500).json({ error: 'WhatsApp desconectado.' });
+    if (!number || !video) return res.status(400).json({ error: 'Campos obrigatórios: number, video' });
+
+    try {
+        const id = number.includes('@s.whatsapp.net') ? number : `${number}@s.whatsapp.net`;
+
+        let videoBuffer;
+        // Verifica se é uma URL (começa com http ou https)
+        if (video.startsWith('http://') || video.startsWith('https://')) {
+            customLog('🔄 Baixando vídeo de URL...');
+            const response = await axios.get(video, { responseType: 'arraybuffer' });
+            videoBuffer = Buffer.from(response.data);
+            customLog(`✅ Vídeo baixado de URL: ${videoBuffer.length} bytes`);
+        } else if (video.startsWith('data:video/')) {
+            // Se é base64, converter para buffer (removendo o prefixo data:video/...)
+            customLog('🔄 Decodificando vídeo Base64...');
+            videoBuffer = Buffer.from(video.split(',')[1], 'base64');
+            customLog(`✅ Vídeo Base64 decodificado: ${videoBuffer.length} bytes`);
+        } else {
+            // Assumir que é uma string base64 pura (sem prefixo)
+            customLog('🔄 Decodificando vídeo Base64 (sem prefixo)...');
+            videoBuffer = Buffer.from(video, 'base64');
+            customLog(`✅ Vídeo Base64 decodificado: ${videoBuffer.length} bytes`);
+        }
+
+        await sock.sendMessage(id, {
+            video: videoBuffer,
+            caption: caption || ''
+        });
+        customLog(`📤 Vídeo enviado para: ${id}`);
+        res.json({
+            success: true,
+            to: id,
+            type: 'video',
+            instance: sock.user?.id || 'unknown',
+            instanceName: sock.user?.name || 'Unknown'
+        });
+    } catch (err) {
+        customLog('❌ Erro ao enviar vídeo:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Enviar áudio
+app.post('/send-audio', auth, async (req, res) => {
+    const { number, audio, ptt = false } = req.body;
+    if (!sock) return res.status(500).json({ error: 'WhatsApp desconectado.' });
+    if (!number || !audio) return res.status(400).json({ error: 'Campos obrigatórios: number, audio' });
+
+    try {
+        const id = number.includes('@s.whatsapp.net') ? number : `${number}@s.whatsapp.net`;
+
+        let audioBuffer;
+        
+        // Verifica se é uma URL (começa com http ou https)
+        if (audio.startsWith('http://') || audio.startsWith('https://')) {
+            customLog('🔄 Baixando áudio de URL...');
+            const response = await axios.get(audio, { responseType: 'arraybuffer' });
+            audioBuffer = Buffer.from(response.data);
+            customLog(`✅ Áudio baixado de URL: ${audioBuffer.length} bytes`);
+        } else if (audio.startsWith('data:audio/')) {
+            // Se é base64, converter para buffer (removendo o prefixo data:audio/...)     
+            customLog('🔄 Decodificando áudio Base64...');
+            audioBuffer = Buffer.from(audio.split(',')[1], 'base64');
+            customLog(`✅ Áudio Base64 decodificado: ${audioBuffer.length} bytes`);
+        } else {
+            // Assumir que é uma string base64 pura (sem prefixo)
+            customLog('🔄 Decodificando áudio Base64 (sem prefixo)...');
+            audioBuffer = Buffer.from(audio, 'base64');
+            customLog(`✅ Áudio Base64 decodificado: ${audioBuffer.length} bytes`);
+        }
+
+        // --- Transcodificar para OPUS usando ffmpeg ---
+        customLog('🔄 Transcodificando áudio para OPUS...');
+        const opusBuffer = await new Promise((resolve, reject) => {
+            let buffers = [];
+            const { Readable } = require('stream');
+            const audioStream = new Readable();
+            audioStream.push(audioBuffer);
+            audioStream.push(null); // Indica o fim do stream
+
+            const command = ffmpeg(audioStream) // Passa o stream diretamente como entrada
+                .inputFormat('mp3') // Assumindo que a entrada é MP3 do Eleven Labs
+                .audioCodec('libopus')
+                .audioChannels(1) // Mono para mensagens de voz
+                .audioFrequency(16000) // Frequência comum para voz
+                .outputFormat('ogg') // Contêiner OGG para Opus
+                .on('error', (err) => {
+                    customLog('❌ Erro na transcodificação ffmpeg:', err.message);
+                    reject(new Error('Erro na transcodificação de áudio.'));
+                })
+                .on('end', () => {
+                    customLog('✅ Áudio transcodificado para OPUS.');
+                    resolve(Buffer.concat(buffers));
+                })
+                .pipe(
+                    new require('stream').Writable({
+                        write(chunk, encoding, callback) {
+                            buffers.push(chunk);
+                            callback();
+                        },
+                    }),
+                    { end: true }
+                );
+        });
+
+        await sock.sendMessage(id, {
+            audio: opusBuffer,
+            mimetype: 'audio/ogg; codecs=opus', // MimeType correto para Opus no OGG
+            ptt: true // Forçar como mensagem de voz para melhor compatibilidade
+        });
+
+        customLog(`📤 Áudio OPUS enviado para: ${id} (PTT: true)`);
+
+        res.json({
+            success: true,
+            to: id,
+            type: 'audio',
+            mimetype: 'audio/ogg; codecs=opus',
+            ptt: true,
+            instance: sock.user?.id || 'unknown',
+            instanceName: sock.user?.name || 'Unknown'
+        });
+    } catch (err) {
+        customLog('❌ Erro ao enviar áudio:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Enviar documento (PDF, etc.)
+app.post('/send-document', auth, async (req, res) => {
+    const { number, document, filename, caption } = req.body;
+    if (!sock) return res.status(500).json({ error: 'WhatsApp desconectado.' });
+    if (!number || !document) return res.status(400).json({ error: 'Campos obrigatórios: number, document' });
+
+    try {
+        const id = number.includes('@s.whatsapp.net') ? number : `${number}@s.whatsapp.net`;
+
+        let documentBuffer;
+        // Verifica se é uma URL (começa com http ou https)
+        if (document.startsWith('http://') || document.startsWith('https://')) {
+            customLog('🔄 Baixando documento de URL...');
+            const response = await axios.get(document, { responseType: 'arraybuffer' });
+            documentBuffer = Buffer.from(response.data);
+            customLog(`✅ Documento baixado de URL: ${documentBuffer.length} bytes`);
+        } else if (document.startsWith('data:application/')) {
+            // Se é base64, converter para buffer (removendo o prefixo data:application/...)
+            customLog('🔄 Decodificando documento Base64...');
+            documentBuffer = Buffer.from(document.split(',')[1], 'base64');
+            customLog(`✅ Documento Base64 decodificado: ${documentBuffer.length} bytes`);
+        } else {
+            // Assumir que é uma string base64 pura (sem prefixo)
+            customLog('🔄 Decodificando documento Base64 (sem prefixo)...');
+            documentBuffer = Buffer.from(document, 'base64');
+            customLog(`✅ Documento Base64 decodificado: ${documentBuffer.length} bytes`);
+        }
+
+        await sock.sendMessage(id, {
+            document: documentBuffer,
+            fileName: filename || 'documento.pdf',
+            caption: caption || ''
+        });
+        customLog(`📤 Documento enviado para: ${id} (${filename || 'documento.pdf'})`);
+        res.json({
+            success: true,
+            to: id,
+            type: 'document',
+            filename: filename || 'documento.pdf',
+            instance: sock.user?.id || 'unknown',
+            instanceName: sock.user?.name || 'Unknown'
+        });
+    } catch (err) {
+        customLog('❌ Erro ao enviar documento:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Enviar localização
+app.post('/send-location', auth, async (req, res) => {
+    const { number, latitude, longitude, name, address } = req.body;
+    if (!sock) return res.status(500).json({ error: 'WhatsApp desconectado.' });
+    if (!number || !latitude || !longitude) return res.status(400).json({ error: 'Campos obrigatórios: number, latitude, longitude' });
+
+    try {
+        const id = number.includes('@s.whatsapp.net') ? number : `${number}@s.whatsapp.net`;
+
+        await sock.sendMessage(id, {
+            location: {
+                degreesLatitude: parseFloat(latitude),
+                degreesLongitude: parseFloat(longitude),
+                name: name || '',
+                address: address || ''
+            }
+        });
+        customLog(`📤 Localização enviada para: ${id} (${latitude}, ${longitude})`);
+        res.json({
+            success: true,
+            to: id,
+            type: 'location',
+            latitude,
+            longitude,
+            instance: sock.user?.id || 'unknown',
+            instanceName: sock.user?.name || 'Unknown'
+        });
+    } catch (err) {
+        customLog('❌ Erro ao enviar localização:', err.message);
         res.status(500).json({ error: err.message });
     }
 });

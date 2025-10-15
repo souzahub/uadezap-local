@@ -1,5 +1,8 @@
 # Uadezap API (Evolution-like)
 
+# Pegar Versao atual do Navegador
+F12 no navegado e digite: window.Debug.VERSION
+
 Este projeto implementa uma API para integração com o WhatsApp, utilizando a biblioteca `@whiskeysockets/baileys`. Ele visa fornecer funcionalidades semelhantes às APIs de WhatsApp existentes, como a Evolution API, permitindo o envio e recebimento de mensagens, além de oferecer uma interface web para gerenciar a conexão e visualizar o status.
 
 ## Funcionalidades Principais

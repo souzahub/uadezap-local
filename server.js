@@ -63,7 +63,7 @@ function cleanupOldMessages() {
 }
 
 // === Carregar Baileys com import() dinâmico (ES Module) ===
-let makeWASocket, useMultiFileAuthState, DisconnectReason, jidNormalizedUser;
+let makeWASocket, useMultiFileAuthState, DisconnectReason, jidNormalizedUser, fetchLatestBaileysVersion;
 
 (async () => {
     try {
@@ -72,6 +72,7 @@ let makeWASocket, useMultiFileAuthState, DisconnectReason, jidNormalizedUser;
         useMultiFileAuthState = baileys.useMultiFileAuthState;
         DisconnectReason = baileys.DisconnectReason;
         jidNormalizedUser = baileys.jidNormalizedUser;
+        fetchLatestBaileysVersion = baileys.fetchLatestBaileysVersion;
         customLog('✅ Baileys carregado com sucesso');
     } catch (err) {
         console.error('❌ Falha ao carregar @whiskeysockets/baileys:', err.message);
@@ -83,6 +84,8 @@ let makeWASocket, useMultiFileAuthState, DisconnectReason, jidNormalizedUser;
 // === CONFIGURAÇÕES ===
 const API_KEY = process.env.API_KEY || 'minha123senha';
 const N8N_WEBHOOK_URL = process.env.N8N_WEBHOOK_URL || null;
+// Permite forçar a versão do WhatsApp Web via ENV no formato "2.3000.1025107405"
+const CONFIG_SESSION_PHONE_VERSION = process.env.CONFIG_SESSION_PHONE_VERSION || '';
 const VERSION = '1.0.1';
 
 // Função para reconexão automática
@@ -96,12 +99,36 @@ async function connectToWhatsApp() {
         customLog('🔄 Iniciando conexão com WhatsApp...');
         const { state, saveCreds } = await useMultiFileAuthState('./auth_info_baileys_local');
 
+        // Descobrir versão WA: usar ENV se definido; caso contrário buscar a última suportada pelo Baileys
+        let forcedVersionTuple = null;
+        if (CONFIG_SESSION_PHONE_VERSION) {
+            try {
+                forcedVersionTuple = CONFIG_SESSION_PHONE_VERSION.split('.').map((n) => parseInt(n, 10)).filter((n) => Number.isFinite(n));
+                if (forcedVersionTuple.length !== 3) {
+                    customLog('⚠️ CONFIG_SESSION_PHONE_VERSION inválida. Esperado formato X.Y.Z');
+                    forcedVersionTuple = null;
+                }
+            } catch {}
+        }
+
+        let resolvedVersion = null;
+        if (!forcedVersionTuple && typeof fetchLatestBaileysVersion === 'function') {
+            try {
+                const latest = await fetchLatestBaileysVersion();
+                resolvedVersion = latest?.version;
+            } catch (e) {
+                customLog('⚠️ Falha ao buscar versão WA mais recente:', e?.message || e);
+            }
+        }
+
         sock = makeWASocket({
             auth: state,
             printQRInTerminal: false,
             syncFullHistory: false,
             markOnlineOnConnect: true,
             browser: ['Uadezap API', 'Chrome', '1.0.2'],
+            // Define a versão do WhatsApp Web a ser usada
+            version: forcedVersionTuple || resolvedVersion || undefined,
             connectTimeoutMs: 60_000,
             keepAliveIntervalMs: 30_000,
             retryRequestDelayMs: 250,
@@ -115,6 +142,14 @@ async function connectToWhatsApp() {
                 }
             }
         });
+
+        if (forcedVersionTuple) {
+            customLog('🔧 Usando versão WA (forçada via ENV):', forcedVersionTuple.join('.'));
+        } else if (resolvedVersion) {
+            customLog('ℹ️ Usando versão WA (mais recente):', resolvedVersion.join('.'));
+        } else {
+            customLog('ℹ️ Versão WA padrão do Baileys será utilizada.');
+        }
 
         sock.ev.on('connection.update', ({ qr, connection, lastDisconnect }) => {
             if (qr) {

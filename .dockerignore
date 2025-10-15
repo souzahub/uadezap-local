@@ -1,0 +1,14 @@
+node_modules
+npm-debug.log
+Dockerfile*
+.dockerignore
+.git
+.gitignore
+auth_info_baileys*
+auth_info_baileys_local*
+Utils/
+**/*.zip
+**/*.7z
+**/*.rar
+**/*.msi
+**/*.exe

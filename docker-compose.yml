@@ -1,0 +1,14 @@
+version: '3.9'
+services:
+  uadezap:
+    build: .
+    container_name: uadezap-local
+    ports:
+      - "3000:3000"
+    environment:
+      - API_KEY=${API_KEY:-minha123senha}
+      - CONFIG_SESSION_PHONE_VERSION=2.3000.1025107405
+      - PORT=3000
+    volumes:
+      - ./auth_info_baileys_local:/app/auth_info_baileys_local
+    restart: unless-stopped
