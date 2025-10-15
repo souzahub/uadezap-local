@@ -63,7 +63,7 @@ if not exist ".env" (
 echo [✓] Iniciando a API do WhatsApp...
 echo.
 echo 🔗 Acesse: http://localhost:3000/qrcode
-echo 🔐 Use o header: x-api-key: 167f9b3e2c18a5b1c2b3489a631d2960
+echo 🔐 Use o header: x-api-key: xxxxxxxxxxxxxxxxxxxxxxxx
 echo.
 echo (Para parar o servidor, pressione Ctrl + C)
 echo.
