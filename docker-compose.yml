@@ -6,7 +6,7 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - API_KEY=${API_KEY:-minha123senha}
+      - API_KEY=199122
       - CONFIG_SESSION_PHONE_VERSION=2.3000.1025107405
       - PORT=3000
     volumes:
