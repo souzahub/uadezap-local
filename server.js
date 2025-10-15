@@ -492,10 +492,51 @@ async function connectToWhatsApp() {
                     cleanupOldMessages();
                 }
 
-                // Envia para webhook
+                // Envia para webhook (formato detalhado compatível com versao_web)
                 if (N8N_WEBHOOK_URL) {
                     try {
-                        await axios.post(N8N_WEBHOOK_URL, messageData, {
+                        const payloadForN8N = {
+                            event: 'messages.upsert',
+                            instance: messageData.instanceName || 'unknown',
+                            data: {
+                                key: {
+                                    remoteJid: from,
+                                    fromMe: false,
+                                    id: messageId
+                                },
+                                pushName: pushName,
+                                message: {
+                                    base64: messageData.base64,
+                                    messageType: messageData.type ? messageData.type + 'Message' : undefined,
+                                    messageTimestamp: timestamp,
+                                    ...msg.message // inclui objeto original do Baileys quando existir
+                                },
+                                messageType: messageData.type ? messageData.type + 'Message' : undefined,
+                                messageTimestamp: timestamp,
+                                instanceId: messageData.instance || 'unknown',
+                                source: messageData.deviceType || 'unknown'
+                            },
+                            destination: N8N_WEBHOOK_URL,
+                            date_time: new Date().toISOString(),
+                            sender: from,
+                            server_url: process.env.SERVER_URL || `http://localhost:${process.env.PORT || 3000}`,
+                            apikey: API_KEY
+                        };
+
+                        // Adiciona sub-objetos de mídia quando presentes
+                        if (messageData.type === 'image' && msg.message?.imageMessage) {
+                            payloadForN8N.data.message.imageMessage = msg.message.imageMessage;
+                        } else if (messageData.type === 'video' && msg.message?.videoMessage) {
+                            payloadForN8N.data.message.videoMessage = msg.message.videoMessage;
+                        } else if (messageData.type === 'audio' && msg.message?.audioMessage) {
+                            payloadForN8N.data.message.audioMessage = msg.message.audioMessage;
+                        } else if (messageData.type === 'document' && msg.message?.documentMessage) {
+                            payloadForN8N.data.message.documentMessage = msg.message.documentMessage;
+                        } else if (messageData.type === 'sticker' && msg.message?.stickerMessage) {
+                            payloadForN8N.data.message.stickerMessage = msg.message.stickerMessage;
+                        }
+
+                        await axios.post(N8N_WEBHOOK_URL, payloadForN8N, {
                             timeout: 5000,
                             headers: { 'Content-Type': 'application/json' }
                         });
