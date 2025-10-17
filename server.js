@@ -1330,17 +1330,21 @@ app.post('/send-buttons', auth, async (req, res) => {
     try {
         const id = number.includes('@s.whatsapp.net') ? number : `${number}@s.whatsapp.net`;
 
-        const msg = {
-            text,
-            templateButtons: buttons.map((b, idx) => ({
-                index: idx + 1,
-                quickReplyButton: { id: b.id, displayText: b.displayText }
-            }))
+        // Use hydratedTemplate to maximize compatibility across clients
+        const hydratedMsg = {
+            templateMessage: {
+                hydratedTemplate: {
+                    hydratedContentText: text,
+                    hydratedButtons: buttons.map((b) => ({
+                        quickReplyButton: { id: b.id, displayText: b.displayText }
+                    }))
+                }
+            }
         };
-        if (headerText) msg.header = { title: headerText };
-        if (footerText) msg.footer = { text: footerText };
+        if (headerText) hydratedMsg.templateMessage.hydratedTemplate.hydratedTitle = headerText;
+        if (footerText) hydratedMsg.templateMessage.hydratedTemplate.hydratedFooterText = footerText;
 
-        await sock.sendMessage(id, msg);
+        await sock.sendMessage(id, hydratedMsg);
         customLog(`📤 Botões enviados para: ${id} (${buttons.length} botões)`);
         res.json({
             success: true,
