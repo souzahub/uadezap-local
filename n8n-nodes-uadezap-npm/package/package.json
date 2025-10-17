@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-uadezap",
-  "version": "0.1.19",
+  "version": "0.1.20",
   "description": "Nó para integração com a API Uadezap para envio de mensagens",
   "keywords": [
     "n8n-community-node-package"
