@@ -1336,28 +1336,28 @@ app.post('/send-buttons', auth, async (req, res) => {
     try {
         const id = number.includes('@s.whatsapp.net') ? number : `${number}@s.whatsapp.net`;
 
-        // Payload principal usando interactiveMessage
+        // Payload principal usando o formato clássico de botões do Baileys
+        // Este formato possui maior taxa de sucesso nos apps móveis atuais
         const primaryPayload = {
-            interactiveMessage: {
-                body: { text: text },
-                buttons: buttons.map((button) => ({
-                    buttonId: button.id,
-                    buttonText: { displayText: button.displayText },
-                    type: 1
-                })),
-                header: headerText ? { type: 1, text: headerText } : undefined,
-                footer: footerText ? { text: footerText } : undefined
-            }
+            text: headerText ? `${headerText}\n\n${text}` : text,
+            footer: footerText || undefined,
+            buttons: buttons.map((button) => ({
+                buttonId: button.id,
+                buttonText: { displayText: button.displayText },
+                type: 1
+            })),
+            headerType: 1
         };
 
         let result;
         try {
             result = await sock.sendMessage(id, primaryPayload);
         } catch (errPrimary) {
-            customLog('⚠️ Falha no buttonsMessage, tentando templateButtons:', errPrimary?.message || errPrimary);
+            customLog('⚠️ Falha no formato buttons, tentando templateButtons:', errPrimary?.message || errPrimary);
             // Fallback (templateButtons)
             const fallbackPayload = {
-                text: text,
+                text: headerText ? `${headerText}\n\n${text}` : text,
+                footer: footerText || undefined,
                 templateButtons: buttons.map((b, idx) => ({
                     index: idx + 1,
                     quickReplyButton: { id: b.id, displayText: b.displayText }
