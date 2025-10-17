@@ -1223,27 +1223,20 @@ app.post('/send-list', auth, async (req, res) => {
     try {
         const id = number.includes('@s.whatsapp.net') ? number : `${number}@s.whatsapp.net`;
 
-        // Criar estrutura de lista
-        const listMessage = {
-            text: {
-                text: listDescription
-            },
-            listMessage: {
+        const msg = {
+            text: listDescription,
+            buttonText: 'Ver Opções',
+            sections: [{
                 title: listTitle,
-                description: listDescription,
-                buttonText: 'Ver Opções',
-                sections: [{
-                    title: listTitle,
-                    rows: listItems.map(item => ({
-                        title: item.title,
-                        description: item.description || '',
-                        rowId: item.id
-                    }))
-                }]
-            }
+                rows: listItems.map(item => ({
+                    title: item.title,
+                    description: item.description || '',
+                    rowId: item.id
+                }))
+            }]
         };
 
-        await sock.sendMessage(id, listMessage);
+        await sock.sendMessage(id, msg);
         customLog(`📤 Lista enviada para: ${id} (${listItems.length} itens)`);
         res.json({
             success: true,
@@ -1271,40 +1264,25 @@ app.post('/send-template', auth, async (req, res) => {
 
     try {
         const id = number.includes('@s.whatsapp.net') ? number : `${number}@s.whatsapp.net`;
-        
-        // Processar parâmetros do template
         let parameters = [];
         if (templateParameters) {
             if (typeof templateParameters === 'string') {
-                // Se for string separada por vírgulas
                 parameters = templateParameters.split(',').map(p => p.trim()).filter(p => p);
             } else if (Array.isArray(templateParameters)) {
-                // Se for array
                 parameters = templateParameters;
             }
         }
 
-        // Criar estrutura de template message
-        const templateMessage = {
-            templateMessage: {
-                fourRowTemplate: {
-                    hydratedContentText: `Template: ${templateName}`,
-                    hydratedFooterText: 'Template Message',
-                    hydratedButtons: [{
-                        quickReplyButton: {
-                            displayText: 'Responder',
-                            id: 'template_response'
-                        }
-                    }]
-                },
-                hydratedTemplate: {
-                    hydratedContentText: `Template: ${templateName}${parameters.length > 0 ? '\n\nParâmetros: ' + parameters.join(', ') : ''}`,
-                    hydratedFooterText: 'Template Message'
-                }
-            }
+        // Send a simple text + optional quick reply button as a safe template stand-in
+        const text = `Template: ${templateName}${parameters.length ? '\n' + parameters.join(', ') : ''}`;
+        const message = {
+            text,
+            templateButtons: [
+                { index: 1, quickReplyButton: { id: 'template_ok', displayText: 'OK' } }
+            ]
         };
 
-        await sock.sendMessage(id, templateMessage);
+        await sock.sendMessage(id, message);
         customLog(`📤 Template enviado para: ${id} (${templateName})`);
         res.json({
             success: true,
@@ -1331,12 +1309,10 @@ app.post('/send-buttons', auth, async (req, res) => {
         });
     }
 
-    // Validar número de botões
     if (buttons.length > 3) {
         return res.status(400).json({ error: 'Máximo de 3 botões permitidos.' });
     }
 
-    // Validar estrutura dos botões
     for (let i = 0; i < buttons.length; i++) {
         const button = buttons[i];
         if (!button.id || !button.displayText) {
@@ -1354,33 +1330,17 @@ app.post('/send-buttons', auth, async (req, res) => {
     try {
         const id = number.includes('@s.whatsapp.net') ? number : `${number}@s.whatsapp.net`;
 
-        // Criar estrutura de template message com botões
-        const templateMessage = {
-            text: {
-                text: text
-            },
-            templateMessage: {
-                hydratedTemplate: {
-                    hydratedContentText: text,
-                    hydratedButtons: buttons.map(button => ({
-                        quickReplyButton: {
-                            displayText: button.displayText,
-                            id: button.id
-                        }
-                    }))
-                }
-            }
+        const msg = {
+            text,
+            templateButtons: buttons.map((b, idx) => ({
+                index: idx + 1,
+                quickReplyButton: { id: b.id, displayText: b.displayText }
+            }))
         };
+        if (headerText) msg.header = { title: headerText };
+        if (footerText) msg.footer = { text: footerText };
 
-        // Adicionar header e footer se fornecidos
-        if (headerText) {
-            templateMessage.templateMessage.hydratedTemplate.hydratedTitle = headerText;
-        }
-        if (footerText) {
-            templateMessage.templateMessage.hydratedTemplate.hydratedFooterText = footerText;
-        }
-
-        await sock.sendMessage(id, templateMessage);
+        await sock.sendMessage(id, msg);
         customLog(`📤 Botões enviados para: ${id} (${buttons.length} botões)`);
         res.json({
             success: true,
