@@ -1187,64 +1187,72 @@ END:VCARD`;
 
 // Enviar lista (template message)
 app.post('/send-list', auth, async (req, res) => {
-    const { number, listTitle, listDescription, listItems } = req.body;
+    const { number, listTitle, listDescription, listItems, buttonText = 'Ver Opções', footerText, sections } = req.body;
     if (!sock) return res.status(500).json({ error: 'WhatsApp desconectado.' });
-    if (!number || !listTitle || !listDescription || !listItems || !Array.isArray(listItems)) {
+    // Aceita tanto (listItems + listTitle) quanto (sections) como entrada
+    if (!number || (!sections && (!listTitle || !listItems || !Array.isArray(listItems)))) {
         return res.status(400).json({ 
-            error: 'Campos obrigatórios: number, listTitle, listDescription, listItems (array)' 
+            error: 'Campos obrigatórios: number e (sections OU listTitle + listItems[])' 
         });
     }
 
-    // Validar número de itens (máximo 10)
-    if (listItems.length > 10) {
-        return res.status(400).json({ error: 'Máximo de 10 itens permitidos na lista.' });
-    }
-
-    // Validar estrutura dos itens
-    for (let i = 0; i < listItems.length; i++) {
-        const item = listItems[i];
-        if (!item.id || !item.title) {
-            return res.status(400).json({ 
-                error: `Item ${i + 1}: campos 'id' e 'title' são obrigatórios.` 
-            });
+    // Normalizar para a estrutura de sections do Baileys
+    let normalizedSections = sections;
+    if (!normalizedSections) {
+        // Validar número de itens (máximo 10)
+        if (listItems.length > 10) {
+            return res.status(400).json({ error: 'Máximo de 10 itens permitidos na lista.' });
         }
-        if (item.title.length > 24) {
-            return res.status(400).json({ 
-                error: `Item ${i + 1}: 'title' deve ter no máximo 24 caracteres.` 
-            });
+        // Validar estrutura dos itens
+        for (let i = 0; i < listItems.length; i++) {
+            const item = listItems[i];
+            if (!item.id || !item.title) {
+                return res.status(400).json({ 
+                    error: `Item ${i + 1}: campos 'id' e 'title' são obrigatórios.` 
+                });
+            }
+            if (item.title.length > 24) {
+                return res.status(400).json({ 
+                    error: `Item ${i + 1}: 'title' deve ter no máximo 24 caracteres.` 
+                });
+            }
+            if (item.description && item.description.length > 72) {
+                return res.status(400).json({ 
+                    error: `Item ${i + 1}: 'description' deve ter no máximo 72 caracteres.` 
+                });
+            }
         }
-        if (item.description && item.description.length > 72) {
-            return res.status(400).json({ 
-                error: `Item ${i + 1}: 'description' deve ter no máximo 72 caracteres.` 
-            });
-        }
+        normalizedSections = [{
+            title: listTitle,
+            rows: listItems.map(item => ({
+                title: item.title,
+                description: item.description || '',
+                rowId: item.id
+            }))
+        }];
     }
 
     try {
         const id = number.includes('@s.whatsapp.net') ? number : `${number}@s.whatsapp.net`;
 
         const msg = {
-            text: listDescription,
-            buttonText: 'Ver Opções',
-            sections: [{
-                title: listTitle,
-                rows: listItems.map(item => ({
-                    title: item.title,
-                    description: item.description || '',
-                    rowId: item.id
-                }))
-            }]
+            text: listDescription || 'Selecione uma opção:',
+            title: listTitle || undefined,
+            footer: footerText || undefined,
+            buttonText: buttonText || 'Ver Opções',
+            sections: normalizedSections
         };
 
         await sock.sendMessage(id, msg);
-        customLog(`📤 Lista enviada para: ${id} (${listItems.length} itens)`);
+        const itemsCount = normalizedSections.reduce((acc, s) => acc + (s.rows?.length || 0), 0);
+        customLog(`📤 Lista enviada para: ${id} (${itemsCount} itens)`);
         res.json({
             success: true,
             to: id,
             type: 'list',
-            listTitle,
-            listDescription,
-            itemsCount: listItems.length,
+            listTitle: listTitle || normalizedSections?.[0]?.title,
+            listDescription: listDescription || '',
+            itemsCount,
             instance: sock.user?.id || 'unknown',
             instanceName: sock.user?.name || 'Unknown'
         });
