@@ -1309,37 +1309,62 @@ app.post('/send-buttons', auth, async (req, res) => {
         });
     }
 
-    if (buttons.length > 3) {
-        return res.status(400).json({ error: 'Máximo de 3 botões permitidos.' });
+    // Validar número de botões
+    if (buttons.length === 0 || buttons.length > 3) {
+        return res.status(400).json({ error: `Número de botões inválido: ${buttons.length}. Permitido: 1 a 3 botões.` });
     }
 
+    // Validações detalhadas dos botões
+    const idSet = new Set();
     for (let i = 0; i < buttons.length; i++) {
-        const button = buttons[i];
-        if (!button.id || !button.displayText) {
-            return res.status(400).json({ 
-                error: `Botão ${i + 1}: campos 'id' e 'displayText' são obrigatórios.` 
-            });
+        const b = buttons[i];
+        if (!b || !b.id || !b.displayText) {
+            return res.status(400).json({ error: `Botão ${i + 1}: campos 'id' e 'displayText' são obrigatórios.` });
         }
-        if (button.displayText.length > 25) {
-            return res.status(400).json({ 
-                error: `Botão ${i + 1}: 'displayText' deve ter no máximo 25 caracteres.` 
-            });
+        if (b.displayText.length > 25) {
+            return res.status(400).json({ error: `Botão ${i + 1}: 'displayText' deve ter no máximo 25 caracteres.` });
         }
+        if (!/^[a-zA-Z0-9_\-:.\/]+$/.test(b.id)) {
+            return res.status(400).json({ error: `Botão ${i + 1}: ID '${b.id}' contém caracteres inválidos.` });
+        }
+        if (idSet.has(b.id)) {
+            return res.status(400).json({ error: `Botão ${i + 1}: ID '${b.id}' duplicado. IDs devem ser únicos.` });
+        }
+        idSet.add(b.id);
     }
 
     try {
         const id = number.includes('@s.whatsapp.net') ? number : `${number}@s.whatsapp.net`;
 
-        // Minimal structure widely supported by Baileys
-        const msg = {
-            text,
-            templateButtons: buttons.map((b, idx) => ({
-                index: idx + 1,
-                quickReplyButton: { id: b.id, displayText: b.displayText }
-            }))
+        // Payload principal (buttonsMessage)
+        const primaryPayload = {
+            text: text,
+            buttons: buttons.map((button) => ({
+                buttonId: button.id,
+                buttonText: { displayText: button.displayText },
+                type: 1,
+            })),
+            headerType: 1,
         };
+        if (headerText) primaryPayload.title = headerText;
+        if (footerText) primaryPayload.footer = footerText;
 
-        await sock.sendMessage(id, msg);
+        let result;
+        try {
+            result = await sock.sendMessage(id, primaryPayload);
+        } catch (errPrimary) {
+            customLog('⚠️ Falha no buttonsMessage, tentando templateButtons:', errPrimary?.message || errPrimary);
+            // Fallback (templateButtons)
+            const fallbackPayload = {
+                text: text,
+                templateButtons: buttons.map((b, idx) => ({
+                    index: idx + 1,
+                    quickReplyButton: { id: b.id, displayText: b.displayText }
+                }))
+            };
+            result = await sock.sendMessage(id, fallbackPayload);
+        }
+
         customLog(`📤 Botões enviados para: ${id} (${buttons.length} botões)`);
         res.json({
             success: true,
