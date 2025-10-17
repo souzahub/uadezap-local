@@ -1,0 +1,141 @@
+🔘 EXEMPLOS COMPLETOS DE TODAS AS FUNCIONALIDADES UADEZAP
+
+📋 1. ENVIO DE TEXTO
+POST /send-text
+{
+  "number": "5521999999999",
+  "message": "Olá! Esta é uma mensagem de texto."
+}
+
+📋 2. ENVIO DE IMAGEM
+POST /send-image
+{
+  "number": "5521999999999",
+  "image": "https://example.com/image.jpg",
+  "caption": "Legenda da imagem"
+}
+
+📋 3. ENVIO DE VÍDEO
+POST /send-video
+{
+  "number": "5521999999999",
+  "video": "https://example.com/video.mp4",
+  "caption": "Legenda do vídeo"
+}
+
+📋 4. ENVIO DE ÁUDIO
+POST /send-audio
+{
+  "number": "5521999999999",
+  "audio": "https://example.com/audio.mp3",
+  "ptt": false
+}
+
+📋 5. ENVIO DE DOCUMENTO
+POST /send-document
+{
+  "number": "5521999999999",
+  "document": "https://example.com/document.pdf",
+  "filename": "meu_documento.pdf",
+  "caption": "Legenda do documento"
+}
+
+📋 6. ENVIO DE LOCALIZAÇÃO
+POST /send-location
+{
+  "number": "5521999999999",
+  "latitude": -22.9068,
+  "longitude": -43.1729,
+  "name": "Rio de Janeiro",
+  "address": "Centro, Rio de Janeiro - RJ"
+}
+
+📋 7. ENVIO DE CONTATO
+POST /send-contact
+{
+  "number": "5521999999999",
+  "contactName": "João Silva",
+  "contactPhone": "5521888888888"
+}
+
+📋 8. ENVIO DE BOTÕES INTERATIVOS
+POST /send-buttons
+{
+  "number": "5521999999999",
+  "text": "Escolha uma opção:",
+  "headerText": "Menu Principal",
+  "footerText": "Responda com um dos botões",
+  "buttons": [
+    {
+      "id": "opcao1",
+      "displayText": "Ver Produtos"
+    },
+    {
+      "id": "opcao2",
+      "displayText": "Falar com Atendente"
+    },
+    {
+      "id": "opcao3",
+      "displayText": "Suporte Técnico"
+    }
+  ]
+}
+
+📋 9. ENVIO DE LISTA
+POST /send-list
+{
+  "number": "5521999999999",
+  "listTitle": "Produtos Disponíveis",
+  "listDescription": "Escolha um produto da lista:",
+  "listItems": [
+    {
+      "id": "produto1",
+      "title": "Smartphone",
+      "description": "Smartphone Android com 128GB"
+    },
+    {
+      "id": "produto2",
+      "title": "Notebook",
+      "description": "Notebook Intel i7 com 16GB RAM"
+    },
+    {
+      "id": "produto3",
+      "title": "Tablet",
+      "description": "Tablet 10 polegadas com tela HD"
+    }
+  ]
+}
+
+📋 10. ENVIO DE TEMPLATE
+POST /send-template
+{
+  "number": "5521999999999",
+  "templateName": "confirmacao_pedido",
+  "templateParameters": ["João Silva", "R$ 299,90", "12345"]
+}
+
+🚀 EXEMPLO COM cURL PARA TESTAR:
+
+# Teste de texto
+curl -X POST http://localhost:3000/send-text \
+  -H "x-api-key: minha123senha" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "number": "5521999999999",
+    "message": "Teste de mensagem de texto"
+  }'
+
+# Teste de botões
+curl -X POST http://localhost:3000/send-buttons \
+  -H "x-api-key: minha123senha" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "number": "5521999999999",
+    "text": "Como posso ajudar?",
+    "buttons": [
+      {"id": "suporte", "displayText": "Suporte"},
+      {"id": "vendas", "displayText": "Vendas"}
+    ]
+  }'
+
+✅ TODAS AS FUNCIONALIDADES ESTÃO SINCRONIZADAS ENTRE OS PROJETOS!

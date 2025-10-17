@@ -804,6 +804,14 @@ app.get('/', (req, res) => {
                             <div><code>/send-document</code> — enviar PDF</div>
                             <div class="muted">POST</div>
                             <div><code>/send-location</code> — enviar localização</div>
+                            <div class="muted">POST</div>
+                            <div><code>/send-buttons</code> — enviar botões interativos</div>
+                            <div class="muted">POST</div>
+                            <div><code>/send-contact</code> — enviar contato</div>
+                            <div class="muted">POST</div>
+                            <div><code>/send-list</code> — enviar lista de opções</div>
+                            <div class="muted">POST</div>
+                            <div><code>/send-template</code> — enviar template</div>
                         </div>
                     </div>
                 </div>
@@ -1130,6 +1138,262 @@ app.post('/send-location', auth, async (req, res) => {
         });
     } catch (err) {
         customLog('❌ Erro ao enviar localização:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Enviar contato
+app.post('/send-contact', auth, async (req, res) => {
+    const { number, contactName, contactPhone } = req.body;
+    if (!sock) return res.status(500).json({ error: 'WhatsApp desconectado.' });
+    if (!number || !contactName || !contactPhone) {
+        return res.status(400).json({ error: 'Campos obrigatórios: number, contactName, contactPhone' });
+    }
+
+    try {
+        const id = number.includes('@s.whatsapp.net') ? number : `${number}@s.whatsapp.net`;
+        
+        // Criar vCard para o contato
+        const vcard = `BEGIN:VCARD
+VERSION:3.0
+FN:${contactName}
+TEL:${contactPhone}
+END:VCARD`;
+
+        await sock.sendMessage(id, {
+            contacts: {
+                displayName: contactName,
+                contacts: [{
+                    vcard: vcard
+                }]
+            }
+        });
+        
+        customLog(`📤 Contato enviado para: ${id} (${contactName}: ${contactPhone})`);
+        res.json({
+            success: true,
+            to: id,
+            type: 'contact',
+            contactName,
+            contactPhone,
+            instance: sock.user?.id || 'unknown',
+            instanceName: sock.user?.name || 'Unknown'
+        });
+    } catch (err) {
+        customLog('❌ Erro ao enviar contato:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Enviar lista (template message)
+app.post('/send-list', auth, async (req, res) => {
+    const { number, listTitle, listDescription, listItems } = req.body;
+    if (!sock) return res.status(500).json({ error: 'WhatsApp desconectado.' });
+    if (!number || !listTitle || !listDescription || !listItems || !Array.isArray(listItems)) {
+        return res.status(400).json({ 
+            error: 'Campos obrigatórios: number, listTitle, listDescription, listItems (array)' 
+        });
+    }
+
+    // Validar número de itens (máximo 10)
+    if (listItems.length > 10) {
+        return res.status(400).json({ error: 'Máximo de 10 itens permitidos na lista.' });
+    }
+
+    // Validar estrutura dos itens
+    for (let i = 0; i < listItems.length; i++) {
+        const item = listItems[i];
+        if (!item.id || !item.title) {
+            return res.status(400).json({ 
+                error: `Item ${i + 1}: campos 'id' e 'title' são obrigatórios.` 
+            });
+        }
+        if (item.title.length > 24) {
+            return res.status(400).json({ 
+                error: `Item ${i + 1}: 'title' deve ter no máximo 24 caracteres.` 
+            });
+        }
+        if (item.description && item.description.length > 72) {
+            return res.status(400).json({ 
+                error: `Item ${i + 1}: 'description' deve ter no máximo 72 caracteres.` 
+            });
+        }
+    }
+
+    try {
+        const id = number.includes('@s.whatsapp.net') ? number : `${number}@s.whatsapp.net`;
+
+        // Criar estrutura de lista
+        const listMessage = {
+            text: {
+                text: listDescription
+            },
+            listMessage: {
+                title: listTitle,
+                description: listDescription,
+                buttonText: 'Ver Opções',
+                sections: [{
+                    title: listTitle,
+                    rows: listItems.map(item => ({
+                        title: item.title,
+                        description: item.description || '',
+                        rowId: item.id
+                    }))
+                }]
+            }
+        };
+
+        await sock.sendMessage(id, listMessage);
+        customLog(`📤 Lista enviada para: ${id} (${listItems.length} itens)`);
+        res.json({
+            success: true,
+            to: id,
+            type: 'list',
+            listTitle,
+            listDescription,
+            itemsCount: listItems.length,
+            instance: sock.user?.id || 'unknown',
+            instanceName: sock.user?.name || 'Unknown'
+        });
+    } catch (err) {
+        customLog('❌ Erro ao enviar lista:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Enviar template (template message)
+app.post('/send-template', auth, async (req, res) => {
+    const { number, templateName, templateParameters } = req.body;
+    if (!sock) return res.status(500).json({ error: 'WhatsApp desconectado.' });
+    if (!number || !templateName) {
+        return res.status(400).json({ error: 'Campos obrigatórios: number, templateName' });
+    }
+
+    try {
+        const id = number.includes('@s.whatsapp.net') ? number : `${number}@s.whatsapp.net`;
+        
+        // Processar parâmetros do template
+        let parameters = [];
+        if (templateParameters) {
+            if (typeof templateParameters === 'string') {
+                // Se for string separada por vírgulas
+                parameters = templateParameters.split(',').map(p => p.trim()).filter(p => p);
+            } else if (Array.isArray(templateParameters)) {
+                // Se for array
+                parameters = templateParameters;
+            }
+        }
+
+        // Criar estrutura de template message
+        const templateMessage = {
+            templateMessage: {
+                fourRowTemplate: {
+                    hydratedContentText: `Template: ${templateName}`,
+                    hydratedFooterText: 'Template Message',
+                    hydratedButtons: [{
+                        quickReplyButton: {
+                            displayText: 'Responder',
+                            id: 'template_response'
+                        }
+                    }]
+                },
+                hydratedTemplate: {
+                    hydratedContentText: `Template: ${templateName}${parameters.length > 0 ? '\n\nParâmetros: ' + parameters.join(', ') : ''}`,
+                    hydratedFooterText: 'Template Message'
+                }
+            }
+        };
+
+        await sock.sendMessage(id, templateMessage);
+        customLog(`📤 Template enviado para: ${id} (${templateName})`);
+        res.json({
+            success: true,
+            to: id,
+            type: 'template',
+            templateName,
+            parameters,
+            instance: sock.user?.id || 'unknown',
+            instanceName: sock.user?.name || 'Unknown'
+        });
+    } catch (err) {
+        customLog('❌ Erro ao enviar template:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Enviar botões (template message)
+app.post('/send-buttons', auth, async (req, res) => {
+    const { number, text, buttons, headerText, footerText } = req.body;
+    if (!sock) return res.status(500).json({ error: 'WhatsApp desconectado.' });
+    if (!number || !text || !buttons || !Array.isArray(buttons)) {
+        return res.status(400).json({ 
+            error: 'Campos obrigatórios: number, text, buttons (array). Máximo 3 botões.' 
+        });
+    }
+
+    // Validar número de botões
+    if (buttons.length > 3) {
+        return res.status(400).json({ error: 'Máximo de 3 botões permitidos.' });
+    }
+
+    // Validar estrutura dos botões
+    for (let i = 0; i < buttons.length; i++) {
+        const button = buttons[i];
+        if (!button.id || !button.displayText) {
+            return res.status(400).json({ 
+                error: `Botão ${i + 1}: campos 'id' e 'displayText' são obrigatórios.` 
+            });
+        }
+        if (button.displayText.length > 25) {
+            return res.status(400).json({ 
+                error: `Botão ${i + 1}: 'displayText' deve ter no máximo 25 caracteres.` 
+            });
+        }
+    }
+
+    try {
+        const id = number.includes('@s.whatsapp.net') ? number : `${number}@s.whatsapp.net`;
+
+        // Criar estrutura de template message com botões
+        const templateMessage = {
+            text: {
+                text: text
+            },
+            templateMessage: {
+                hydratedTemplate: {
+                    hydratedContentText: text,
+                    hydratedButtons: buttons.map(button => ({
+                        quickReplyButton: {
+                            displayText: button.displayText,
+                            id: button.id
+                        }
+                    }))
+                }
+            }
+        };
+
+        // Adicionar header e footer se fornecidos
+        if (headerText) {
+            templateMessage.templateMessage.hydratedTemplate.hydratedTitle = headerText;
+        }
+        if (footerText) {
+            templateMessage.templateMessage.hydratedTemplate.hydratedFooterText = footerText;
+        }
+
+        await sock.sendMessage(id, templateMessage);
+        customLog(`📤 Botões enviados para: ${id} (${buttons.length} botões)`);
+        res.json({
+            success: true,
+            to: id,
+            type: 'buttons',
+            text,
+            buttonsCount: buttons.length,
+            buttons: buttons.map(b => ({ id: b.id, displayText: b.displayText })),
+            instance: sock.user?.id || 'unknown',
+            instanceName: sock.user?.name || 'Unknown'
+        });
+    } catch (err) {
+        customLog('❌ Erro ao enviar botões:', err.message);
         res.status(500).json({ error: err.message });
     }
 });

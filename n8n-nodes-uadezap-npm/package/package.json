@@ -1,0 +1,62 @@
+{
+  "name": "n8n-nodes-uadezap",
+  "version": "0.1.18",
+  "description": "Nó para integração com a API Uadezap para envio de mensagens",
+  "keywords": [
+    "n8n-community-node-package"
+  ],
+  "license": "MIT",
+  "homepage": "",
+  "author": {
+    "name": "Luan Souza de Siqueira",
+    "email": "luansouza.ti29@gmail.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": ""
+  },
+  "engines": {
+    "node": ">=20.15"
+  },
+  "main": "index.js",
+  "scripts": {
+    "build": "npx rimraf dist && tsc && gulp build:icons",
+    "dev": "tsc --watch",
+    "format": "prettier nodes credentials --write",
+    "lint": "eslint nodes credentials package.json",
+    "lintfix": "eslint nodes credentials package.json --fix",
+    "prepublishOnly": "echo 'Publishing package...'"
+  },
+  "files": [
+    "index.js",
+    "package.json",
+    "LICENSE.md",
+    "README.md",
+    "dist"
+  ],
+  "n8n": {
+    "n8nNodesApiVersion": 1,
+    "credentials": [
+      "dist/credentials/UadezapApi.credentials.js"
+    ],
+    "nodes": [
+      "dist/nodes/Uadezap/Uadezap.node.js"
+    ]
+  },
+  "devDependencies": {
+    "@typescript-eslint/parser": "~8.32.0",
+    "eslint": "^8.57.0",
+    "eslint-plugin-n8n-nodes-base": "^1.16.3",
+    "gulp": "^5.0.0",
+    "prettier": "^3.5.3",
+    "typescript": "^5.8.2"
+  },
+  "peerDependencies": {
+    "n8n-workflow": "*"
+  },
+  "dependencies": {
+    "axios": "^1.7.2",
+    "fluent-ffmpeg": "^2.1.3"
+  }
+}
+
