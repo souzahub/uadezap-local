@@ -805,13 +805,7 @@ app.get('/', (req, res) => {
                             <div class="muted">POST</div>
                             <div><code>/send-location</code> — enviar localização</div>
                             <div class="muted">POST</div>
-                            <div><code>/send-buttons</code> — enviar botões interativos</div>
-                            <div class="muted">POST</div>
                             <div><code>/send-contact</code> — enviar contato</div>
-                            <div class="muted">POST</div>
-                            <div><code>/send-list</code> — enviar lista de opções</div>
-                            <div class="muted">POST</div>
-                            <div><code>/send-template</code> — enviar template</div>
                         </div>
                     </div>
                 </div>
@@ -1185,8 +1179,8 @@ END:VCARD`;
     }
 });
 
-// Enviar lista (template message)
-app.post('/send-list', auth, async (req, res) => {
+/* Removed: /send-list */
+/*app.post('/send-list', auth, async (req, res) => {
     const { number, listTitle, listDescription, listItems, buttonText = 'Ver Opções', footerText, sections } = req.body;
     if (!sock) return res.status(500).json({ error: 'WhatsApp desconectado.' });
     // Aceita tanto (listItems + listTitle) quanto (sections) como entrada
@@ -1260,10 +1254,10 @@ app.post('/send-list', auth, async (req, res) => {
         customLog('❌ Erro ao enviar lista:', err.message);
         res.status(500).json({ error: err.message });
     }
-});
+});*/
 
-// Enviar template (template message)
-app.post('/send-template', auth, async (req, res) => {
+/* Removed: /send-template */
+/*app.post('/send-template', auth, async (req, res) => {
     const { number, templateName, templateParameters } = req.body;
     if (!sock) return res.status(500).json({ error: 'WhatsApp desconectado.' });
     if (!number || !templateName) {
@@ -1305,10 +1299,10 @@ app.post('/send-template', auth, async (req, res) => {
         customLog('❌ Erro ao enviar template:', err.message);
         res.status(500).json({ error: err.message });
     }
-});
+});*/
 
-// Enviar botões (template message)
-app.post('/send-buttons', auth, async (req, res) => {
+/* Removed: /send-buttons */
+/*app.post('/send-buttons', auth, async (req, res) => {
     const { number, text, buttons, headerText, footerText } = req.body;
     if (!sock) return res.status(500).json({ error: 'WhatsApp desconectado.' });
     if (!number || !text || !buttons || !Array.isArray(buttons)) {
@@ -1390,7 +1384,7 @@ app.post('/send-buttons', auth, async (req, res) => {
         customLog('❌ Erro ao enviar botões:', err.message);
         res.status(500).json({ error: err.message });
     }
-});
+});*/
 
 // Webhook de teste
 app.post('/webhook-receive', auth, (req, res) => {
