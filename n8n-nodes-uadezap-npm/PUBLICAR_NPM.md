@@ -88,3 +88,9 @@ npm install n8n-nodes-uadezap@latest
 ---
 
 **💡 Dica:** Sempre teste com `npm pack` antes de publicar!
+
+### codigo completo
+npm whoami
+cd package
+npm pack
+npm publish

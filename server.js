@@ -801,6 +801,10 @@ app.get('/', (req, res) => {
                             <div class="muted">POST</div>
                             <div><code>/send-audio</code> — enviar áudio</div>
                             <div class="muted">POST</div>
+                            <div><code>/test-audio</code> — testar áudio (sem enviar)</div>
+                            <div class="muted">POST</div>
+                            <div><code>/convert-audio</code> — otimizar áudio para smartphone</div>
+                            <div class="muted">POST</div>
                             <div><code>/send-document</code> — enviar PDF</div>
                             <div class="muted">POST</div>
                             <div><code>/send-location</code> — enviar localização</div>
@@ -1027,6 +1031,116 @@ app.post('/send-video', auth, async (req, res) => {
 });
 
 // Enviar áudio
+// Endpoint para testar áudio sem enviar
+app.post('/test-audio', auth, async (req, res) => {
+    const { audio } = req.body;
+    if (!audio) return res.status(400).json({ error: 'Campo audio obrigatório' });
+
+    try {
+        let audioBuffer;
+        let audioInfo = {};
+
+        if (audio.startsWith('http')) {
+            customLog(`📥 Testando download de: ${audio}`);
+            const response = await axios.get(audio, { 
+                responseType: 'arraybuffer',
+                timeout: 30000,
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                }
+            });
+            
+            audioInfo.url = audio;
+            audioInfo.contentType = response.headers['content-type'];
+            audioInfo.contentLength = response.headers['content-length'];
+            audioInfo.downloadedSize = response.data.length;
+            
+            audioBuffer = Buffer.from(response.data);
+        } else {
+            customLog(`🔄 Testando base64...`);
+            const base64Data = audio.replace(/^data:audio\/[a-z]+;base64,/, '');
+            audioBuffer = Buffer.from(base64Data, 'base64');
+            
+            audioInfo.type = 'base64';
+            audioInfo.base64Length = base64Data.length;
+            audioInfo.processedSize = audioBuffer.length;
+        }
+
+        res.json({
+            success: true,
+            audioInfo,
+            bufferSize: audioBuffer.length,
+            isValid: audioBuffer.length > 0,
+            message: audioBuffer.length > 0 ? 'Áudio válido' : 'Áudio inválido'
+        });
+
+    } catch (err) {
+        customLog('❌ Erro ao testar áudio:', err.message);
+        res.status(500).json({ 
+            success: false,
+            error: err.message,
+            audioInfo: null
+        });
+    }
+});
+
+// Endpoint para converter áudio para formato smartphone
+app.post('/convert-audio', auth, async (req, res) => {
+    const { audio, targetFormat = 'ogg' } = req.body;
+    if (!audio) return res.status(400).json({ error: 'Campo audio obrigatório' });
+
+    try {
+        let audioBuffer;
+        let originalFormat = 'unknown';
+
+        if (audio.startsWith('http')) {
+            customLog(`📥 Baixando áudio para conversão: ${audio}`);
+            const response = await axios.get(audio, { 
+                responseType: 'arraybuffer',
+                timeout: 30000,
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                }
+            });
+            
+            originalFormat = response.headers['content-type'] || 'unknown';
+            audioBuffer = Buffer.from(response.data);
+        } else {
+            customLog(`🔄 Processando base64 para conversão...`);
+            const base64Data = audio.replace(/^data:audio\/[a-z]+;base64,/, '');
+            audioBuffer = Buffer.from(base64Data, 'base64');
+            
+            // Detectar formato do base64
+            if (audio.includes('audio/mp3')) originalFormat = 'audio/mpeg';
+            else if (audio.includes('audio/ogg')) originalFormat = 'audio/ogg';
+            else if (audio.includes('audio/wav')) originalFormat = 'audio/wav';
+        }
+
+        // Para smartphone, recomendamos OGG Opus
+        const recommendedFormat = 'audio/ogg; codecs=opus';
+        
+        res.json({
+            success: true,
+            originalFormat,
+            recommendedFormat,
+            bufferSize: audioBuffer.length,
+            smartphoneOptimized: true,
+            message: 'Áudio otimizado para smartphone. Use PTT=true para mensagens de voz.',
+            instructions: {
+                voiceMessage: 'Use ptt: true + mimetype: "audio/ogg; codecs=opus"',
+                musicFile: 'Use ptt: false + mimetype: "audio/mpeg"'
+            }
+        });
+
+    } catch (err) {
+        customLog('❌ Erro ao converter áudio:', err.message);
+        res.status(500).json({ 
+            success: false,
+            error: err.message
+        });
+    }
+});
+
 app.post('/send-audio', auth, async (req, res) => {
     const { number, audio, ptt = false } = req.body;
     if (!sock) return res.status(500).json({ error: 'WhatsApp desconectado.' });
@@ -1038,23 +1152,70 @@ app.post('/send-audio', auth, async (req, res) => {
         // Se audio é uma URL, baixar o áudio
         let audioBuffer;
         if (audio.startsWith('http')) {
-            const response = await axios.get(audio, { responseType: 'arraybuffer' });
+            customLog(`📥 Baixando áudio de: ${audio}`);
+            const response = await axios.get(audio, { 
+                responseType: 'arraybuffer',
+                timeout: 30000, // 30 segundos timeout
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                }
+            });
+            
+            if (!response.data || response.data.length === 0) {
+                throw new Error('Arquivo de áudio vazio ou inválido');
+            }
+            
             audioBuffer = Buffer.from(response.data);
+            customLog(`✅ Áudio baixado: ${audioBuffer.length} bytes`);
         } else {
             // Se é base64, converter para buffer
-            audioBuffer = Buffer.from(audio.replace(/^data:audio\/[a-z]+;base64,/, ''), 'base64');
+            customLog(`🔄 Processando áudio base64...`);
+            const base64Data = audio.replace(/^data:audio\/[a-z]+;base64,/, '');
+            
+            if (!base64Data || base64Data.length === 0) {
+                throw new Error('Dados base64 vazios ou inválidos');
+            }
+            
+            audioBuffer = Buffer.from(base64Data, 'base64');
+            customLog(`✅ Base64 processado: ${audioBuffer.length} bytes`);
         }
 
-        await sock.sendMessage(id, {
+        // Validar se o buffer não está vazio
+        if (!audioBuffer || audioBuffer.length === 0) {
+            throw new Error('Buffer de áudio vazio');
+        }
+
+        customLog(`📤 Enviando áudio para: ${id} (PTT: ${ptt}, Tamanho: ${audioBuffer.length} bytes)`);
+
+        // Configuração específica para smartphone
+        const messageOptions = {
             audio: audioBuffer,
-            ptt: ptt // true para áudio de voz, false para música
-        });
-        customLog(`📤 Áudio enviado para: ${id} (PTT: ${ptt})`);
+            ptt: ptt, // true para áudio de voz, false para música
+            mimetype: 'audio/ogg; codecs=opus', // Formato preferido para smartphone
+            seconds: undefined, // Deixa o WhatsApp calcular automaticamente
+            waveform: undefined // Deixa o WhatsApp gerar automaticamente
+        };
+
+        // Se for PTT (voice message), usar configurações específicas para smartphone
+        if (ptt) {
+            messageOptions.mimetype = 'audio/ogg; codecs=opus';
+            messageOptions.ptt = true;
+            customLog(`📱 Enviando como mensagem de voz (PTT) para smartphone`);
+        } else {
+            messageOptions.mimetype = 'audio/mpeg';
+            messageOptions.ptt = false;
+            customLog(`🎵 Enviando como arquivo de música para smartphone`);
+        }
+
+        await sock.sendMessage(id, messageOptions);
+        
+        customLog(`✅ Áudio enviado com sucesso para: ${id}`);
         res.json({
             success: true,
             to: id,
             type: 'audio',
             ptt,
+            size: audioBuffer.length,
             instance: sock.user?.id || 'unknown',
             instanceName: sock.user?.name || 'Unknown'
         });
