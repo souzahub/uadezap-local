@@ -1130,16 +1130,7 @@ app.post('/test-audio', auth, async (req, res) => {
     }
 });
 
-// Endpoint para converter áudio para formato smartphone
-
-    } catch (err) {
-        customLog('❌ Erro ao converter áudio:', err.message);
-        res.status(500).json({ 
-            success: false,
-            error: err.message
-        });
-    }
-});
+// (removido) endpoint /convert-audio incompleto
 
 app.post('/send-audio', auth, async (req, res) => {
     const { number, audio, ptt = false } = req.body;
@@ -1147,7 +1138,17 @@ app.post('/send-audio', auth, async (req, res) => {
     if (!number || !audio) return res.status(400).json({ error: 'Campos obrigatórios: number, audio' });
 
     try {
-        const id = number.includes('@s.whatsapp.net') ? number : `${number}@s.whatsapp.net`;
+        // Suporte a grupos e números individuais
+        let id;
+        if (typeof number === 'string' && number.endsWith('@g.us')) {
+            id = number; // Grupo
+        } else if (typeof number === 'string' && number.includes('@s.whatsapp.net')) {
+            id = number; // JID individual completo
+        } else if (typeof number === 'string' && number.includes('-') && number.endsWith('@g.us')) {
+            id = number; // Grupo com hifen
+        } else {
+            id = `${number}@s.whatsapp.net`; // Número individual cru
+        }
 
         // Se audio é uma URL, baixar o áudio
         let audioBuffer;
@@ -1217,7 +1218,8 @@ app.post('/send-audio', auth, async (req, res) => {
             ptt,
             size: audioBuffer.length,
             instance: sock.user?.id || 'unknown',
-            instanceName: sock.user?.name || 'Unknown'
+            instanceName: sock.user?.name || 'Unknown',
+            isGroup: id.endsWith('@g.us')
         });
     } catch (err) {
         customLog('❌ Erro ao enviar áudio:', err.message);
@@ -1232,7 +1234,17 @@ app.post('/send-document', auth, async (req, res) => {
     if (!number || !document) return res.status(400).json({ error: 'Campos obrigatórios: number, document' });
 
     try {
-        const id = number.includes('@s.whatsapp.net') ? number : `${number}@s.whatsapp.net`;
+        // Suporte a grupos e números individuais
+        let id;
+        if (typeof number === 'string' && number.endsWith('@g.us')) {
+            id = number;
+        } else if (typeof number === 'string' && number.includes('@s.whatsapp.net')) {
+            id = number;
+        } else if (typeof number === 'string' && number.includes('-') && number.endsWith('@g.us')) {
+            id = number;
+        } else {
+            id = `${number}@s.whatsapp.net`;
+        }
 
         // Se document é uma URL, baixar o documento
         let documentBuffer;
@@ -1256,7 +1268,8 @@ app.post('/send-document', auth, async (req, res) => {
             type: 'document',
             filename: filename || 'documento.pdf',
             instance: sock.user?.id || 'unknown',
-            instanceName: sock.user?.name || 'Unknown'
+            instanceName: sock.user?.name || 'Unknown',
+            isGroup: id.endsWith('@g.us')
         });
     } catch (err) {
         customLog('❌ Erro ao enviar documento:', err.message);
@@ -1271,7 +1284,17 @@ app.post('/send-location', auth, async (req, res) => {
     if (!number || !latitude || !longitude) return res.status(400).json({ error: 'Campos obrigatórios: number, latitude, longitude' });
 
     try {
-        const id = number.includes('@s.whatsapp.net') ? number : `${number}@s.whatsapp.net`;
+        // Suporte a grupos e números individuais
+        let id;
+        if (typeof number === 'string' && number.endsWith('@g.us')) {
+            id = number;
+        } else if (typeof number === 'string' && number.includes('@s.whatsapp.net')) {
+            id = number;
+        } else if (typeof number === 'string' && number.includes('-') && number.endsWith('@g.us')) {
+            id = number;
+        } else {
+            id = `${number}@s.whatsapp.net`;
+        }
 
         await sock.sendMessage(id, {
             location: {
@@ -1289,7 +1312,8 @@ app.post('/send-location', auth, async (req, res) => {
             latitude,
             longitude,
             instance: sock.user?.id || 'unknown',
-            instanceName: sock.user?.name || 'Unknown'
+            instanceName: sock.user?.name || 'Unknown',
+            isGroup: id.endsWith('@g.us')
         });
     } catch (err) {
         customLog('❌ Erro ao enviar localização:', err.message);
@@ -1306,7 +1330,17 @@ app.post('/send-contact', auth, async (req, res) => {
     }
 
     try {
-        const id = number.includes('@s.whatsapp.net') ? number : `${number}@s.whatsapp.net`;
+        // Suporte a grupos e números individuais
+        let id;
+        if (typeof number === 'string' && number.endsWith('@g.us')) {
+            id = number;
+        } else if (typeof number === 'string' && number.includes('@s.whatsapp.net')) {
+            id = number;
+        } else if (typeof number === 'string' && number.includes('-') && number.endsWith('@g.us')) {
+            id = number;
+        } else {
+            id = `${number}@s.whatsapp.net`;
+        }
         
         // Criar vCard para o contato
         const vcard = `BEGIN:VCARD
@@ -1332,7 +1366,8 @@ END:VCARD`;
             contactName,
             contactPhone,
             instance: sock.user?.id || 'unknown',
-            instanceName: sock.user?.name || 'Unknown'
+            instanceName: sock.user?.name || 'Unknown',
+            isGroup: id.endsWith('@g.us')
         });
     } catch (err) {
         customLog('❌ Erro ao enviar contato:', err.message);
