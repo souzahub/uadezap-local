@@ -161,9 +161,9 @@ async function connectToWhatsApp() {
 
             if (connection === 'open') {
                 customLog('✅ WhatsApp conectado com sucesso!');
-                customLog('📱 Dispositivo: ' + (sock.user?.deviceType || 'Desconhecido'));
-                customLog('👤 Usuário: ' + (sock.user?.name || 'Desconhecido'));
-                customLog('🆔 Instância: ' + (sock.user?.id || 'Desconhecido'));
+                customLog('📱 Dispositivo: ' + ((sock && sock.user && sock.user.deviceType) || 'Desconhecido'));
+                customLog('👤 Usuário: ' + ((sock && sock.user && sock.user.name) || 'Desconhecido'));
+                customLog('🆔 Instância: ' + ((sock && sock.user && sock.user.id) || 'Desconhecido'));
                 qrCodeData = null;
             }
 
@@ -283,9 +283,9 @@ async function connectToWhatsApp() {
                         pushName,
                         timestamp,
                         deviceType: msg.key.id.includes('BAE5') ? 'android' : 'web',
-                        instance: sock.user?.id || 'unknown',
-                        instanceName: sock.user?.name || 'Unknown',
-                        instanceDevice: sock.user?.deviceType || 'unknown'
+                        instance: (sock && sock.user && sock.user.id) || 'unknown',
+                        instanceName: (sock && sock.user && sock.user.name) || 'Unknown',
+                        instanceDevice: (sock && sock.user && sock.user.deviceType) || 'unknown'
                     };
 
                     // 1. Texto
@@ -938,6 +938,15 @@ app.post('/send-text', auth, async (req, res) => {
     const { number, message } = req.body;
     if (!sock) return res.status(500).json({ error: 'WhatsApp desconectado.' });
     if (!number || !message) return res.status(400).json({ error: 'Campos obrigatórios: number, message' });
+    
+    // Verificar se o socket está realmente conectado
+    console.log('🔍 Debug - sock:', !!sock);
+    console.log('🔍 Debug - sock.user:', sock?.user);
+    console.log('🔍 Debug - sock.user.id:', sock?.user?.id);
+    
+    if (!sock.user || !sock.user.id) {
+        return res.status(500).json({ error: 'WhatsApp não está totalmente conectado. Aguarde a conexão completa.' });
+    }
 
     try {
         // Check if number already has a valid JID suffix
@@ -956,16 +965,21 @@ app.post('/send-text', auth, async (req, res) => {
             id = `${number}@s.whatsapp.net`;
         }
         
-        await sock.sendMessage(id, { text: message });
-        customLog(`📤 Texto enviado para: ${id}`);
-        res.json({
-            success: true,
-            to: id,
-            message,
-            instance: sock.user?.id || 'unknown',
-            instanceName: sock.user?.name || 'Unknown',
-            isGroup: id.endsWith('@g.us')
-        });
+        try {
+            await sock.sendMessage(id, { text: message });
+            customLog(`📤 Texto enviado para: ${id}`);
+            res.json({
+                success: true,
+                to: id,
+                message,
+                instance: (sock && sock.user && sock.user.id) || 'unknown',
+                instanceName: (sock && sock.user && sock.user.name) || 'Unknown',
+                isGroup: id.endsWith('@g.us')
+            });
+        } catch (sendError) {
+            customLog('❌ Erro ao enviar mensagem:', sendError.message);
+            res.status(500).json({ error: sendError.message });
+        }
     } catch (err) {
         customLog('❌ Erro ao enviar texto:', err.message);
         res.status(500).json({ error: err.message });
@@ -1014,8 +1028,8 @@ app.post('/send-image', auth, async (req, res) => {
             success: true,
             to: id,
             type: 'image',
-            instance: sock.user?.id || 'unknown',
-            instanceName: sock.user?.name || 'Unknown',
+            instance: (sock && sock.user && sock.user.id) || 'unknown',
+            instanceName: (sock && sock.user && sock.user.name) || 'Unknown',
             isGroup: id.endsWith('@g.us')
         });
     } catch (err) {
@@ -1066,8 +1080,8 @@ app.post('/send-video', auth, async (req, res) => {
             success: true,
             to: id,
             type: 'video',
-            instance: sock.user?.id || 'unknown',
-            instanceName: sock.user?.name || 'Unknown',
+            instance: (sock && sock.user && sock.user.id) || 'unknown',
+            instanceName: (sock && sock.user && sock.user.name) || 'Unknown',
             isGroup: id.endsWith('@g.us')
         });
     } catch (err) {
@@ -1217,8 +1231,8 @@ app.post('/send-audio', auth, async (req, res) => {
             type: 'audio',
             ptt,
             size: audioBuffer.length,
-            instance: sock.user?.id || 'unknown',
-            instanceName: sock.user?.name || 'Unknown',
+            instance: (sock && sock.user && sock.user.id) || 'unknown',
+            instanceName: (sock && sock.user && sock.user.name) || 'Unknown',
             isGroup: id.endsWith('@g.us')
         });
     } catch (err) {
@@ -1267,8 +1281,8 @@ app.post('/send-document', auth, async (req, res) => {
             to: id,
             type: 'document',
             filename: filename || 'documento.pdf',
-            instance: sock.user?.id || 'unknown',
-            instanceName: sock.user?.name || 'Unknown',
+            instance: (sock && sock.user && sock.user.id) || 'unknown',
+            instanceName: (sock && sock.user && sock.user.name) || 'Unknown',
             isGroup: id.endsWith('@g.us')
         });
     } catch (err) {
@@ -1311,8 +1325,8 @@ app.post('/send-location', auth, async (req, res) => {
             type: 'location',
             latitude,
             longitude,
-            instance: sock.user?.id || 'unknown',
-            instanceName: sock.user?.name || 'Unknown',
+            instance: (sock && sock.user && sock.user.id) || 'unknown',
+            instanceName: (sock && sock.user && sock.user.name) || 'Unknown',
             isGroup: id.endsWith('@g.us')
         });
     } catch (err) {
@@ -1365,8 +1379,8 @@ END:VCARD`;
             type: 'contact',
             contactName,
             contactPhone,
-            instance: sock.user?.id || 'unknown',
-            instanceName: sock.user?.name || 'Unknown',
+            instance: (sock && sock.user && sock.user.id) || 'unknown',
+            instanceName: (sock && sock.user && sock.user.name) || 'Unknown',
             isGroup: id.endsWith('@g.us')
         });
     } catch (err) {
@@ -1443,8 +1457,8 @@ END:VCARD`;
             listTitle: listTitle || normalizedSections?.[0]?.title,
             listDescription: listDescription || '',
             itemsCount,
-            instance: sock.user?.id || 'unknown',
-            instanceName: sock.user?.name || 'Unknown'
+            instance: (sock && sock.user && sock.user.id) || 'unknown',
+            instanceName: (sock && sock.user && sock.user.name) || 'Unknown'
         });
     } catch (err) {
         customLog('❌ Erro ao enviar lista:', err.message);
@@ -1488,8 +1502,8 @@ END:VCARD`;
             type: 'template',
             templateName,
             parameters,
-            instance: sock.user?.id || 'unknown',
-            instanceName: sock.user?.name || 'Unknown'
+            instance: (sock && sock.user && sock.user.id) || 'unknown',
+            instanceName: (sock && sock.user && sock.user.name) || 'Unknown'
         });
     } catch (err) {
         customLog('❌ Erro ao enviar template:', err.message);
@@ -1573,8 +1587,8 @@ END:VCARD`;
             text,
             buttonsCount: buttons.length,
             buttons: buttons.map(b => ({ id: b.id, displayText: b.displayText })),
-            instance: sock.user?.id || 'unknown',
-            instanceName: sock.user?.name || 'Unknown'
+            instance: (sock && sock.user && sock.user.id) || 'unknown',
+            instanceName: (sock && sock.user && sock.user.name) || 'Unknown'
         });
     } catch (err) {
         customLog('❌ Erro ao enviar botões:', err.message);
