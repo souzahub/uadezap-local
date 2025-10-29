@@ -940,7 +940,22 @@ app.post('/send-text', auth, async (req, res) => {
     if (!number || !message) return res.status(400).json({ error: 'Campos obrigatórios: number, message' });
 
     try {
-        const id = number.includes('@s.whatsapp.net') ? number : `${number}@s.whatsapp.net`;
+        // Check if number already has a valid JID suffix
+        let id;
+        if (number.endsWith('@g.us')) {
+            // It's a group ID (e.g., 120363422509947345@g.us)
+            id = number;
+        } else if (number.includes('@s.whatsapp.net')) {
+            // It's already a full individual JID
+            id = number;
+        } else if (number.includes('-') && number.endsWith('@g.us')) {
+            // It's a group ID with a hyphen (common in some APIs)
+            id = number;
+        } else {
+            // Assume it's an individual number without @s.whatsapp.net
+            id = `${number}@s.whatsapp.net`;
+        }
+        
         await sock.sendMessage(id, { text: message });
         customLog(`📤 Texto enviado para: ${id}`);
         res.json({
@@ -948,7 +963,8 @@ app.post('/send-text', auth, async (req, res) => {
             to: id,
             message,
             instance: sock.user?.id || 'unknown',
-            instanceName: sock.user?.name || 'Unknown'
+            instanceName: sock.user?.name || 'Unknown',
+            isGroup: id.endsWith('@g.us')
         });
     } catch (err) {
         customLog('❌ Erro ao enviar texto:', err.message);
@@ -963,7 +979,21 @@ app.post('/send-image', auth, async (req, res) => {
     if (!number || !image) return res.status(400).json({ error: 'Campos obrigatórios: number, image' });
 
     try {
-        const id = number.includes('@s.whatsapp.net') ? number : `${number}@s.whatsapp.net`;
+        // Check if number already has a valid JID suffix
+        let id;
+        if (number.endsWith('@g.us')) {
+            // It's a group ID (e.g., 120363422509947345@g.us)
+            id = number;
+        } else if (number.includes('@s.whatsapp.net')) {
+            // It's already a full individual JID
+            id = number;
+        } else if (number.includes('-') && number.endsWith('@g.us')) {
+            // It's a group ID with a hyphen (common in some APIs)
+            id = number;
+        } else {
+            // Assume it's an individual number without @s.whatsapp.net
+            id = `${number}@s.whatsapp.net`;
+        }
 
         // Se image é uma URL, baixar a imagem
         let imageBuffer;
@@ -985,7 +1015,8 @@ app.post('/send-image', auth, async (req, res) => {
             to: id,
             type: 'image',
             instance: sock.user?.id || 'unknown',
-            instanceName: sock.user?.name || 'Unknown'
+            instanceName: sock.user?.name || 'Unknown',
+            isGroup: id.endsWith('@g.us')
         });
     } catch (err) {
         customLog('❌ Erro ao enviar imagem:', err.message);
@@ -1000,7 +1031,21 @@ app.post('/send-video', auth, async (req, res) => {
     if (!number || !video) return res.status(400).json({ error: 'Campos obrigatórios: number, video' });
 
     try {
-        const id = number.includes('@s.whatsapp.net') ? number : `${number}@s.whatsapp.net`;
+        // Check if number already has a valid JID suffix
+        let id;
+        if (number.endsWith('@g.us')) {
+            // It's a group ID (e.g., 120363422509947345@g.us)
+            id = number;
+        } else if (number.includes('@s.whatsapp.net')) {
+            // It's already a full individual JID
+            id = number;
+        } else if (number.includes('-') && number.endsWith('@g.us')) {
+            // It's a group ID with a hyphen (common in some APIs)
+            id = number;
+        } else {
+            // Assume it's an individual number without @s.whatsapp.net
+            id = `${number}@s.whatsapp.net`;
+        }
 
         // Se video é uma URL, baixar o vídeo
         let videoBuffer;
@@ -1022,7 +1067,8 @@ app.post('/send-video', auth, async (req, res) => {
             to: id,
             type: 'video',
             instance: sock.user?.id || 'unknown',
-            instanceName: sock.user?.name || 'Unknown'
+            instanceName: sock.user?.name || 'Unknown',
+            isGroup: id.endsWith('@g.us')
         });
     } catch (err) {
         customLog('❌ Erro ao enviar vídeo:', err.message);
@@ -1085,52 +1131,6 @@ app.post('/test-audio', auth, async (req, res) => {
 });
 
 // Endpoint para converter áudio para formato smartphone
-app.post('/convert-audio', auth, async (req, res) => {
-    const { audio, targetFormat = 'ogg' } = req.body;
-    if (!audio) return res.status(400).json({ error: 'Campo audio obrigatório' });
-
-    try {
-        let audioBuffer;
-        let originalFormat = 'unknown';
-
-        if (audio.startsWith('http')) {
-            customLog(`📥 Baixando áudio para conversão: ${audio}`);
-            const response = await axios.get(audio, { 
-                responseType: 'arraybuffer',
-                timeout: 30000,
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-                }
-            });
-            
-            originalFormat = response.headers['content-type'] || 'unknown';
-            audioBuffer = Buffer.from(response.data);
-        } else {
-            customLog(`🔄 Processando base64 para conversão...`);
-            const base64Data = audio.replace(/^data:audio\/[a-z]+;base64,/, '');
-            audioBuffer = Buffer.from(base64Data, 'base64');
-            
-            // Detectar formato do base64
-            if (audio.includes('audio/mp3')) originalFormat = 'audio/mpeg';
-            else if (audio.includes('audio/ogg')) originalFormat = 'audio/ogg';
-            else if (audio.includes('audio/wav')) originalFormat = 'audio/wav';
-        }
-
-        // Para smartphone, recomendamos OGG Opus
-        const recommendedFormat = 'audio/ogg; codecs=opus';
-        
-        res.json({
-            success: true,
-            originalFormat,
-            recommendedFormat,
-            bufferSize: audioBuffer.length,
-            smartphoneOptimized: true,
-            message: 'Áudio otimizado para smartphone. Use PTT=true para mensagens de voz.',
-            instructions: {
-                voiceMessage: 'Use ptt: true + mimetype: "audio/ogg; codecs=opus"',
-                musicFile: 'Use ptt: false + mimetype: "audio/mpeg"'
-            }
-        });
 
     } catch (err) {
         customLog('❌ Erro ao converter áudio:', err.message);
