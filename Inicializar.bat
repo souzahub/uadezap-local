@@ -59,11 +59,23 @@ if not exist ".env" (
     echo.
 )
 
+:: Define valores padrão
+set "SERVER_PORT=3000"
+set "SERVER_KEY=minha123senha"
+
+:: Tenta ler o .env linha por linha
+if exist ".env" (
+    for /f "usebackq tokens=1* delims==" %%a in (".env") do (
+        if /i "%%a"=="PORT" set "SERVER_PORT=%%b"
+        if /i "%%a"=="API_KEY" set "SERVER_KEY=%%b"
+    )
+)
+
 :: Inicia o servidor
 echo [✓] Iniciando a API do WhatsApp...
 echo.
-echo 🔗 Acesse: http://localhost:3000/qrcode
-echo 🔐 Use o header: x-api-key: xxxxxxxxxxxxxxxxxxxxxxxx
+echo 🔗 Acesse: http://localhost:%SERVER_PORT%/qrcode
+echo 🔐 Use o header: x-api-key: %SERVER_KEY%
 echo.
 echo (Para parar o servidor, pressione Ctrl + C)
 echo.

@@ -126,7 +126,7 @@ async function connectToWhatsApp() {
             printQRInTerminal: false,
             syncFullHistory: false,
             markOnlineOnConnect: true,
-            browser: ['Uadezap API', 'Chrome', '1.0.2'],
+            browser: ['Ubuntu', 'Chrome', '20.0.04'],
             // Define a versão do WhatsApp Web a ser usada
             version: forcedVersionTuple || resolvedVersion || undefined,
             connectTimeoutMs: 60_000,
@@ -940,7 +940,7 @@ app.post('/send-text', auth, async (req, res) => {
     if (!number || !message) return res.status(400).json({ error: 'Campos obrigatórios: number, message' });
 
     try {
-        const id = number.includes('@s.whatsapp.net') ? number : `${number}@s.whatsapp.net`;
+        const id = number.includes('@') ? number : `${number}@s.whatsapp.net`;
         await sock.sendMessage(id, { text: message });
         customLog(`📤 Texto enviado para: ${id}`);
         res.json({
@@ -963,7 +963,7 @@ app.post('/send-image', auth, async (req, res) => {
     if (!number || !image) return res.status(400).json({ error: 'Campos obrigatórios: number, image' });
 
     try {
-        const id = number.includes('@s.whatsapp.net') ? number : `${number}@s.whatsapp.net`;
+        const id = number.includes('@') ? number : `${number}@s.whatsapp.net`;
 
         // Se image é uma URL, baixar a imagem
         let imageBuffer;
@@ -1000,7 +1000,7 @@ app.post('/send-video', auth, async (req, res) => {
     if (!number || !video) return res.status(400).json({ error: 'Campos obrigatórios: number, video' });
 
     try {
-        const id = number.includes('@s.whatsapp.net') ? number : `${number}@s.whatsapp.net`;
+        const id = number.includes('@') ? number : `${number}@s.whatsapp.net`;
 
         // Se video é uma URL, baixar o vídeo
         let videoBuffer;
@@ -1147,7 +1147,7 @@ app.post('/send-audio', auth, async (req, res) => {
     if (!number || !audio) return res.status(400).json({ error: 'Campos obrigatórios: number, audio' });
 
     try {
-        const id = number.includes('@s.whatsapp.net') ? number : `${number}@s.whatsapp.net`;
+        const id = number.includes('@') ? number : `${number}@s.whatsapp.net`;
 
         // Se audio é uma URL, baixar o áudio
         let audioBuffer;
@@ -1232,7 +1232,7 @@ app.post('/send-document', auth, async (req, res) => {
     if (!number || !document) return res.status(400).json({ error: 'Campos obrigatórios: number, document' });
 
     try {
-        const id = number.includes('@s.whatsapp.net') ? number : `${number}@s.whatsapp.net`;
+        const id = number.includes('@') ? number : `${number}@s.whatsapp.net`;
 
         // Se document é uma URL, baixar o documento
         let documentBuffer;
@@ -1271,7 +1271,7 @@ app.post('/send-location', auth, async (req, res) => {
     if (!number || !latitude || !longitude) return res.status(400).json({ error: 'Campos obrigatórios: number, latitude, longitude' });
 
     try {
-        const id = number.includes('@s.whatsapp.net') ? number : `${number}@s.whatsapp.net`;
+        const id = number.includes('@') ? number : `${number}@s.whatsapp.net`;
 
         await sock.sendMessage(id, {
             location: {
@@ -1306,7 +1306,7 @@ app.post('/send-contact', auth, async (req, res) => {
     }
 
     try {
-        const id = number.includes('@s.whatsapp.net') ? number : `${number}@s.whatsapp.net`;
+        const id = number.includes('@') ? number : `${number}@s.whatsapp.net`;
         
         // Criar vCard para o contato
         const vcard = `BEGIN:VCARD
@@ -1388,7 +1388,7 @@ END:VCARD`;
     }
 
     try {
-        const id = number.includes('@s.whatsapp.net') ? number : `${number}@s.whatsapp.net`;
+        const id = number.includes('@') ? number : `${number}@s.whatsapp.net`;
 
         const msg = {
             text: listDescription || 'Selecione uma opção:',
@@ -1426,7 +1426,7 @@ END:VCARD`;
     }
 
     try {
-        const id = number.includes('@s.whatsapp.net') ? number : `${number}@s.whatsapp.net`;
+        const id = number.includes('@') ? number : `${number}@s.whatsapp.net`;
         let parameters = [];
         if (templateParameters) {
             if (typeof templateParameters === 'string') {
@@ -1497,7 +1497,7 @@ END:VCARD`;
     }
 
     try {
-        const id = number.includes('@s.whatsapp.net') ? number : `${number}@s.whatsapp.net`;
+        const id = number.includes('@') ? number : `${number}@s.whatsapp.net`;
 
         // Payload principal usando interactiveMessage (formato mais compatível)
         const primaryPayload = {

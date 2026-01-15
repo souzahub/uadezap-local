@@ -4,11 +4,11 @@ services:
     build: .
     container_name: uadezap-local
     ports:
-      - "3000:3000"
+      - "3001:3001"
     environment:
-      - API_KEY=199122
-      - CONFIG_SESSION_PHONE_VERSION=2.3000.1025107405
-      - PORT=3000
+      - API_KEY=167f9b3e2c18a5b1c2b3489a631d2910
+      # - CONFIG_SESSION_PHONE_VERSION=2.3000.1031980585
+      - PORT=3001
     volumes:
       - ./auth_info_baileys_local:/app/auth_info_baileys_local
     restart: unless-stopped
