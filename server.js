@@ -161,9 +161,9 @@ async function connectToWhatsApp() {
 
             if (connection === 'open') {
                 customLog('✅ WhatsApp conectado com sucesso!');
-                customLog('📱 Dispositivo: ' + (sock.user?.deviceType || 'Desconhecido'));
-                customLog('👤 Usuário: ' + (sock.user?.name || 'Desconhecido'));
-                customLog('🆔 Instância: ' + (sock.user?.id || 'Desconhecido'));
+                customLog('📱 Dispositivo: ' + ((sock && sock.user && sock.user.deviceType) || 'Desconhecido'));
+                customLog('👤 Usuário: ' + ((sock && sock.user && sock.user.name) || 'Desconhecido'));
+                customLog('🆔 Instância: ' + ((sock && sock.user && sock.user.id) || 'Desconhecido'));
                 qrCodeData = null;
             }
 
@@ -283,9 +283,9 @@ async function connectToWhatsApp() {
                         pushName,
                         timestamp,
                         deviceType: msg.key.id.includes('BAE5') ? 'android' : 'web',
-                        instance: sock.user?.id || 'unknown',
-                        instanceName: sock.user?.name || 'Unknown',
-                        instanceDevice: sock.user?.deviceType || 'unknown'
+                        instance: (sock && sock.user && sock.user.id) || 'unknown',
+                        instanceName: (sock && sock.user && sock.user.name) || 'Unknown',
+                        instanceDevice: (sock && sock.user && sock.user.deviceType) || 'unknown'
                     };
 
                     // 1. Texto
@@ -938,18 +938,48 @@ app.post('/send-text', auth, async (req, res) => {
     const { number, message } = req.body;
     if (!sock) return res.status(500).json({ error: 'WhatsApp desconectado.' });
     if (!number || !message) return res.status(400).json({ error: 'Campos obrigatórios: number, message' });
+    
+    // Verificar se o socket está realmente conectado
+    console.log('🔍 Debug - sock:', !!sock);
+    console.log('🔍 Debug - sock.user:', sock?.user);
+    console.log('🔍 Debug - sock.user.id:', sock?.user?.id);
+    
+    if (!sock.user || !sock.user.id) {
+        return res.status(500).json({ error: 'WhatsApp não está totalmente conectado. Aguarde a conexão completa.' });
+    }
 
     try {
-        const id = number.includes('@') ? number : `${number}@s.whatsapp.net`;
-        await sock.sendMessage(id, { text: message });
-        customLog(`📤 Texto enviado para: ${id}`);
-        res.json({
-            success: true,
-            to: id,
-            message,
-            instance: sock.user?.id || 'unknown',
-            instanceName: sock.user?.name || 'Unknown'
-        });
+        // Check if number already has a valid JID suffix
+        let id;
+        if (number.endsWith('@g.us')) {
+            // It's a group ID (e.g., 120363422509947345@g.us)
+            id = number;
+        } else if (number.includes('@s.whatsapp.net')) {
+            // It's already a full individual JID
+            id = number;
+        } else if (number.includes('-') && number.endsWith('@g.us')) {
+            // It's a group ID with a hyphen (common in some APIs)
+            id = number;
+        } else {
+            // Assume it's an individual number without @s.whatsapp.net
+            id = `${number}@s.whatsapp.net`;
+        }
+        
+        try {
+            await sock.sendMessage(id, { text: message });
+            customLog(`📤 Texto enviado para: ${id}`);
+            res.json({
+                success: true,
+                to: id,
+                message,
+                instance: (sock && sock.user && sock.user.id) || 'unknown',
+                instanceName: (sock && sock.user && sock.user.name) || 'Unknown',
+                isGroup: id.endsWith('@g.us')
+            });
+        } catch (sendError) {
+            customLog('❌ Erro ao enviar mensagem:', sendError.message);
+            res.status(500).json({ error: sendError.message });
+        }
     } catch (err) {
         customLog('❌ Erro ao enviar texto:', err.message);
         res.status(500).json({ error: err.message });
@@ -963,7 +993,21 @@ app.post('/send-image', auth, async (req, res) => {
     if (!number || !image) return res.status(400).json({ error: 'Campos obrigatórios: number, image' });
 
     try {
-        const id = number.includes('@') ? number : `${number}@s.whatsapp.net`;
+        // Check if number already has a valid JID suffix
+        let id;
+        if (number.endsWith('@g.us')) {
+            // It's a group ID (e.g., 120363422509947345@g.us)
+            id = number;
+        } else if (number.includes('@s.whatsapp.net')) {
+            // It's already a full individual JID
+            id = number;
+        } else if (number.includes('-') && number.endsWith('@g.us')) {
+            // It's a group ID with a hyphen (common in some APIs)
+            id = number;
+        } else {
+            // Assume it's an individual number without @s.whatsapp.net
+            id = `${number}@s.whatsapp.net`;
+        }
 
         // Se image é uma URL, baixar a imagem
         let imageBuffer;
@@ -984,8 +1028,9 @@ app.post('/send-image', auth, async (req, res) => {
             success: true,
             to: id,
             type: 'image',
-            instance: sock.user?.id || 'unknown',
-            instanceName: sock.user?.name || 'Unknown'
+            instance: (sock && sock.user && sock.user.id) || 'unknown',
+            instanceName: (sock && sock.user && sock.user.name) || 'Unknown',
+            isGroup: id.endsWith('@g.us')
         });
     } catch (err) {
         customLog('❌ Erro ao enviar imagem:', err.message);
@@ -1000,7 +1045,21 @@ app.post('/send-video', auth, async (req, res) => {
     if (!number || !video) return res.status(400).json({ error: 'Campos obrigatórios: number, video' });
 
     try {
-        const id = number.includes('@') ? number : `${number}@s.whatsapp.net`;
+        // Check if number already has a valid JID suffix
+        let id;
+        if (number.endsWith('@g.us')) {
+            // It's a group ID (e.g., 120363422509947345@g.us)
+            id = number;
+        } else if (number.includes('@s.whatsapp.net')) {
+            // It's already a full individual JID
+            id = number;
+        } else if (number.includes('-') && number.endsWith('@g.us')) {
+            // It's a group ID with a hyphen (common in some APIs)
+            id = number;
+        } else {
+            // Assume it's an individual number without @s.whatsapp.net
+            id = `${number}@s.whatsapp.net`;
+        }
 
         // Se video é uma URL, baixar o vídeo
         let videoBuffer;
@@ -1021,8 +1080,9 @@ app.post('/send-video', auth, async (req, res) => {
             success: true,
             to: id,
             type: 'video',
-            instance: sock.user?.id || 'unknown',
-            instanceName: sock.user?.name || 'Unknown'
+            instance: (sock && sock.user && sock.user.id) || 'unknown',
+            instanceName: (sock && sock.user && sock.user.name) || 'Unknown',
+            isGroup: id.endsWith('@g.us')
         });
     } catch (err) {
         customLog('❌ Erro ao enviar vídeo:', err.message);
@@ -1084,62 +1144,7 @@ app.post('/test-audio', auth, async (req, res) => {
     }
 });
 
-// Endpoint para converter áudio para formato smartphone
-app.post('/convert-audio', auth, async (req, res) => {
-    const { audio, targetFormat = 'ogg' } = req.body;
-    if (!audio) return res.status(400).json({ error: 'Campo audio obrigatório' });
-
-    try {
-        let audioBuffer;
-        let originalFormat = 'unknown';
-
-        if (audio.startsWith('http')) {
-            customLog(`📥 Baixando áudio para conversão: ${audio}`);
-            const response = await axios.get(audio, { 
-                responseType: 'arraybuffer',
-                timeout: 30000,
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-                }
-            });
-            
-            originalFormat = response.headers['content-type'] || 'unknown';
-            audioBuffer = Buffer.from(response.data);
-        } else {
-            customLog(`🔄 Processando base64 para conversão...`);
-            const base64Data = audio.replace(/^data:audio\/[a-z]+;base64,/, '');
-            audioBuffer = Buffer.from(base64Data, 'base64');
-            
-            // Detectar formato do base64
-            if (audio.includes('audio/mp3')) originalFormat = 'audio/mpeg';
-            else if (audio.includes('audio/ogg')) originalFormat = 'audio/ogg';
-            else if (audio.includes('audio/wav')) originalFormat = 'audio/wav';
-        }
-
-        // Para smartphone, recomendamos OGG Opus
-        const recommendedFormat = 'audio/ogg; codecs=opus';
-        
-        res.json({
-            success: true,
-            originalFormat,
-            recommendedFormat,
-            bufferSize: audioBuffer.length,
-            smartphoneOptimized: true,
-            message: 'Áudio otimizado para smartphone. Use PTT=true para mensagens de voz.',
-            instructions: {
-                voiceMessage: 'Use ptt: true + mimetype: "audio/ogg; codecs=opus"',
-                musicFile: 'Use ptt: false + mimetype: "audio/mpeg"'
-            }
-        });
-
-    } catch (err) {
-        customLog('❌ Erro ao converter áudio:', err.message);
-        res.status(500).json({ 
-            success: false,
-            error: err.message
-        });
-    }
-});
+// (removido) endpoint /convert-audio incompleto
 
 app.post('/send-audio', auth, async (req, res) => {
     const { number, audio, ptt = false } = req.body;
@@ -1147,7 +1152,17 @@ app.post('/send-audio', auth, async (req, res) => {
     if (!number || !audio) return res.status(400).json({ error: 'Campos obrigatórios: number, audio' });
 
     try {
-        const id = number.includes('@') ? number : `${number}@s.whatsapp.net`;
+        // Suporte a grupos e números individuais
+        let id;
+        if (typeof number === 'string' && number.endsWith('@g.us')) {
+            id = number; // Grupo
+        } else if (typeof number === 'string' && number.includes('@s.whatsapp.net')) {
+            id = number; // JID individual completo
+        } else if (typeof number === 'string' && number.includes('-') && number.endsWith('@g.us')) {
+            id = number; // Grupo com hifen
+        } else {
+            id = `${number}@s.whatsapp.net`; // Número individual cru
+        }
 
         // Se audio é uma URL, baixar o áudio
         let audioBuffer;
@@ -1216,8 +1231,9 @@ app.post('/send-audio', auth, async (req, res) => {
             type: 'audio',
             ptt,
             size: audioBuffer.length,
-            instance: sock.user?.id || 'unknown',
-            instanceName: sock.user?.name || 'Unknown'
+            instance: (sock && sock.user && sock.user.id) || 'unknown',
+            instanceName: (sock && sock.user && sock.user.name) || 'Unknown',
+            isGroup: id.endsWith('@g.us')
         });
     } catch (err) {
         customLog('❌ Erro ao enviar áudio:', err.message);
@@ -1232,7 +1248,17 @@ app.post('/send-document', auth, async (req, res) => {
     if (!number || !document) return res.status(400).json({ error: 'Campos obrigatórios: number, document' });
 
     try {
-        const id = number.includes('@') ? number : `${number}@s.whatsapp.net`;
+        // Suporte a grupos e números individuais
+        let id;
+        if (typeof number === 'string' && number.endsWith('@g.us')) {
+            id = number;
+        } else if (typeof number === 'string' && number.includes('@s.whatsapp.net')) {
+            id = number;
+        } else if (typeof number === 'string' && number.includes('-') && number.endsWith('@g.us')) {
+            id = number;
+        } else {
+            id = `${number}@s.whatsapp.net`;
+        }
 
         // Se document é uma URL, baixar o documento
         let documentBuffer;
@@ -1255,8 +1281,9 @@ app.post('/send-document', auth, async (req, res) => {
             to: id,
             type: 'document',
             filename: filename || 'documento.pdf',
-            instance: sock.user?.id || 'unknown',
-            instanceName: sock.user?.name || 'Unknown'
+            instance: (sock && sock.user && sock.user.id) || 'unknown',
+            instanceName: (sock && sock.user && sock.user.name) || 'Unknown',
+            isGroup: id.endsWith('@g.us')
         });
     } catch (err) {
         customLog('❌ Erro ao enviar documento:', err.message);
@@ -1271,7 +1298,17 @@ app.post('/send-location', auth, async (req, res) => {
     if (!number || !latitude || !longitude) return res.status(400).json({ error: 'Campos obrigatórios: number, latitude, longitude' });
 
     try {
-        const id = number.includes('@') ? number : `${number}@s.whatsapp.net`;
+        // Suporte a grupos e números individuais
+        let id;
+        if (typeof number === 'string' && number.endsWith('@g.us')) {
+            id = number;
+        } else if (typeof number === 'string' && number.includes('@s.whatsapp.net')) {
+            id = number;
+        } else if (typeof number === 'string' && number.includes('-') && number.endsWith('@g.us')) {
+            id = number;
+        } else {
+            id = `${number}@s.whatsapp.net`;
+        }
 
         await sock.sendMessage(id, {
             location: {
@@ -1288,8 +1325,9 @@ app.post('/send-location', auth, async (req, res) => {
             type: 'location',
             latitude,
             longitude,
-            instance: sock.user?.id || 'unknown',
-            instanceName: sock.user?.name || 'Unknown'
+            instance: (sock && sock.user && sock.user.id) || 'unknown',
+            instanceName: (sock && sock.user && sock.user.name) || 'Unknown',
+            isGroup: id.endsWith('@g.us')
         });
     } catch (err) {
         customLog('❌ Erro ao enviar localização:', err.message);
@@ -1306,7 +1344,17 @@ app.post('/send-contact', auth, async (req, res) => {
     }
 
     try {
-        const id = number.includes('@') ? number : `${number}@s.whatsapp.net`;
+        // Suporte a grupos e números individuais
+        let id;
+        if (typeof number === 'string' && number.endsWith('@g.us')) {
+            id = number;
+        } else if (typeof number === 'string' && number.includes('@s.whatsapp.net')) {
+            id = number;
+        } else if (typeof number === 'string' && number.includes('-') && number.endsWith('@g.us')) {
+            id = number;
+        } else {
+            id = `${number}@s.whatsapp.net`;
+        }
         
         // Criar vCard para o contato
         const vcard = `BEGIN:VCARD
@@ -1331,8 +1379,9 @@ END:VCARD`;
             type: 'contact',
             contactName,
             contactPhone,
-            instance: sock.user?.id || 'unknown',
-            instanceName: sock.user?.name || 'Unknown'
+            instance: (sock && sock.user && sock.user.id) || 'unknown',
+            instanceName: (sock && sock.user && sock.user.name) || 'Unknown',
+            isGroup: id.endsWith('@g.us')
         });
     } catch (err) {
         customLog('❌ Erro ao enviar contato:', err.message);
@@ -1408,8 +1457,8 @@ END:VCARD`;
             listTitle: listTitle || normalizedSections?.[0]?.title,
             listDescription: listDescription || '',
             itemsCount,
-            instance: sock.user?.id || 'unknown',
-            instanceName: sock.user?.name || 'Unknown'
+            instance: (sock && sock.user && sock.user.id) || 'unknown',
+            instanceName: (sock && sock.user && sock.user.name) || 'Unknown'
         });
     } catch (err) {
         customLog('❌ Erro ao enviar lista:', err.message);
@@ -1453,8 +1502,8 @@ END:VCARD`;
             type: 'template',
             templateName,
             parameters,
-            instance: sock.user?.id || 'unknown',
-            instanceName: sock.user?.name || 'Unknown'
+            instance: (sock && sock.user && sock.user.id) || 'unknown',
+            instanceName: (sock && sock.user && sock.user.name) || 'Unknown'
         });
     } catch (err) {
         customLog('❌ Erro ao enviar template:', err.message);
@@ -1538,8 +1587,8 @@ END:VCARD`;
             text,
             buttonsCount: buttons.length,
             buttons: buttons.map(b => ({ id: b.id, displayText: b.displayText })),
-            instance: sock.user?.id || 'unknown',
-            instanceName: sock.user?.name || 'Unknown'
+            instance: (sock && sock.user && sock.user.id) || 'unknown',
+            instanceName: (sock && sock.user && sock.user.name) || 'Unknown'
         });
     } catch (err) {
         customLog('❌ Erro ao enviar botões:', err.message);
