@@ -126,15 +126,16 @@ async function connectToWhatsApp() {
             printQRInTerminal: false,
             syncFullHistory: false,
             markOnlineOnConnect: true,
-            browser: ['Ubuntu', 'Chrome', '20.0.04'],
+            browser: ["Uadezap", "Chrome", "10.15.7"], // Identificador mais estável
             // Define a versão do WhatsApp Web a ser usada
             version: forcedVersionTuple || resolvedVersion || undefined,
             connectTimeoutMs: 60_000,
-            keepAliveIntervalMs: 30_000,
-            retryRequestDelayMs: 250,
+            keepAliveIntervalMs: 10_000, // Intervalo menor para evitar desconexões por inatividade
+            retryRequestDelayMs: 500,
             maxMsgRetryCount: 5,
-            defaultQueryTimeoutMs: 0,
-            keepAlive: true,
+            defaultQueryTimeoutMs: 60_000, // Timeout padrão para queries
+            emitOwnEvents: true,
+            fireInitQueries: true,
             generateHighQualityLinkPreview: true,
             getMessage: async (key) => {
                 return {
@@ -168,8 +169,11 @@ async function connectToWhatsApp() {
             }
 
             if (connection === 'close') {
-                const shouldReconnect = new Boom(lastDisconnect?.error)?.output?.statusCode !== DisconnectReason.loggedOut;
-                customLog('🔌 Conexão fechada. Motivo: ' + (lastDisconnect?.error?.message || 'Desconhecido'));
+                const statusCode = new Boom(lastDisconnect?.error)?.output?.statusCode;
+                const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+                const errorMsg = lastDisconnect?.error?.message || 'Desconhecido';
+                
+                customLog(`🔌 Conexão fechada. Status: ${statusCode}, Motivo: ${errorMsg}`);
 
                 if (shouldReconnect) {
                     customLog('🔁 Reconectando em 3 segundos...');
