@@ -1,14 +1,45 @@
-version: '3.9'
+version: "3.9"
+
 services:
   uadezap:
-    build: .
-    container_name: uadezap-local
-    ports:
-      - "3001:3001"
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: uadezap
     environment:
-      - API_KEY=167f9b3e2c18a5b1c2b3489a631d2910
-      # - CONFIG_SESSION_PHONE_VERSION=2.3000.1031980585
-      - PORT=3001
+      API_KEY: 167f9b3e2c18a5b1c2b3489a631d2960
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      PORT: 8080
+      N8N_WEBHOOK_URL: http://n8n:5678/webhook/uadezap
+    ports:
+      - "3000:8080"
+    depends_on:
+      - redis
+      - n8n
+
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: n8n
+    environment:
+      N8N_BASIC_AUTH_ACTIVE: "true"
+      N8N_BASIC_AUTH_USER: admin
+      N8N_BASIC_AUTH_PASSWORD: senha123
+      GENERIC_TIMEZONE: America/Sao_Paulo
+      QUEUE_BULL_REDIS_HOST: redis
+    ports:
+      - "5678:5678"
     volumes:
-      - ./auth_info_baileys_local:/app/auth_info_baileys_local
-    restart: unless-stopped
+      - n8n_data:/home/node/.n8n
+
+  redis:
+    image: redis:7
+    container_name: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+volumes:
+  n8n_data:
+  redis_data:
