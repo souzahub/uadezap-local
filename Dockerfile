@@ -1,25 +1,23 @@
 # Dockerfile - raiz (uadezap-local)
-FROM node:22.16.0-alpine
+FROM node:18-alpine
 
 WORKDIR /app
 
-# Instalar ffmpeg para transcodificação quando necessário
+# Dependências do sistema
 RUN apk add --no-cache ffmpeg
 
-# Copiar manifests primeiro para melhor cache
+# Cache inteligente
 COPY package*.json ./
-
 RUN npm install --production
 
-# Copiar código
+# Código
 COPY . .
 
-# Porta padrão usada pelo server.js
-EXPOSE 3000
+# Porta padrão (EasyPanel + Docker)
+EXPOSE 8080
 
-# Variáveis opcionais podem ser passadas via docker run ou compose (.env)
-# API_KEY, CONFIG_SESSION_PHONE_VERSION, PORT
-
+# Variáveis:
+# API_KEY
+# CONFIG_SESSION_PHONE_VERSION
+# PORT=8080
 CMD ["npm", "start"]
-
-
